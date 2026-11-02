@@ -48,8 +48,10 @@ void AirPlayMediaSource::loop() {
       ESP_LOGD(TAG, "A sender plays again");
       this->set_claim_(SpeakerClaim::SPEAKER_CLAIM_OWNER);
     } else if (this->declined_end_ms_ != 0) {
-      // The declined sender connected again and plays: started again, unless it did so right away by itself
-      if (App.get_loop_component_start_time() - this->declined_end_ms_ >= AUTO_RECONNECT_MS) {
+      // The declined sender connected again and plays: started again, unless it did so right away by itself. A
+      // sender that confirmed the pause (Music Assistant) does not connect again by itself.
+      if (this->parent_->sender_confirmed_pause(this->declined_address_) ||
+          App.get_loop_component_start_time() - this->declined_end_ms_ >= AUTO_RECONNECT_MS) {
         ESP_LOGD(TAG, "A sender plays again");
         this->set_claim_(SpeakerClaim::SPEAKER_CLAIM_OWNER);
       } else {
@@ -177,7 +179,11 @@ void AirPlayMediaSource::check_pause_() {
   if (this->claim_ != SpeakerClaim::SPEAKER_CLAIM_DECLINED || this->declined_end_ms_ != 0 ||
       this->parent_->get_session_state() == ::airplay::SessionState::NONE)
     return;
-  ESP_LOGI(TAG, "The sender did not pause, disconnecting it");
+  if (this->parent_->sender_confirmed_pause(this->declined_address_)) {
+    ESP_LOGI(TAG, "The sender confirmed the pause but keeps sending, disconnecting it");
+  } else {
+    ESP_LOGI(TAG, "The sender did not pause, disconnecting it");
+  }
   this->parent_->request_disconnect();
 }
 

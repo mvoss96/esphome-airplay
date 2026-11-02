@@ -378,6 +378,7 @@ bool AirPlayHub::pause_sender() {
   if (this->receiver_ == nullptr ||
       !this->receiver_->request_sender_command(::airplay::SenderCommand::SENDER_COMMAND_PAUSE))
     return false;
+  this->remote_paused_address_.store(0, std::memory_order_relaxed);
   // Also through remote control: Music Assistant reads the event connection only of Apple devices, but takes DACP
   xSemaphoreTake(this->lock_, portMAX_DELAY);
   const bool has_remote = this->remote_.session_active && this->remote_.target.dacp_id[0] != '\0' &&
@@ -585,8 +586,12 @@ void AirPlayHub::handle_remote_requests_(uint8_t requests) {
   };
   bool unreachable = false;
   for (const auto &command : COMMANDS) {
-    if ((requests & command.request) != 0)
-      unreachable |= !this->send_command_(remote, command.path);
+    if ((requests & command.request) == 0)
+      continue;
+    const int status = this->send_command_(remote, command.path);
+    unreachable |= status == 0;
+    if (command.request == REMOTE_REQUEST_PAUSE && status >= 200 && status < 300)
+      this->remote_paused_address_.store(remote.target.address, std::memory_order_relaxed);
   }
   if ((requests & REMOTE_REQUEST_VOLUME) != 0)
     unreachable |= !this->adjust_volume_(remote);
@@ -600,8 +605,8 @@ void AirPlayHub::handle_remote_requests_(uint8_t requests) {
   }
 }
 
-bool AirPlayHub::send_command_(const RemoteState &remote, const char *command) {
-  return ::airplay::send_dacp_command(remote.target, remote.port, command, COMMAND_TIMEOUT_MS) != 0;
+int AirPlayHub::send_command_(const RemoteState &remote, const char *command) {
+  return ::airplay::send_dacp_command(remote.target, remote.port, command, COMMAND_TIMEOUT_MS);
 }
 
 /// Moves the sender's volume slider to remote_volume_. @return false if the sender could not be reached
@@ -617,7 +622,7 @@ bool AirPlayHub::adjust_volume_(const RemoteState &remote) {
     const float target = this->remote_volume_.load(std::memory_order_relaxed);
     char command[64];
     if (::airplay::dacp_volume_command(target, command, sizeof(command)) > 0) {
-      reachable = this->send_command_(remote, command);
+      reachable = this->send_command_(remote, command) != 0;
       // Without a session there is no report to wait for
       if (reachable && session) {
         if (this->wait_for_volume_(target, ABSOLUTE_VOLUME_WAIT_MS)) {
@@ -644,7 +649,7 @@ bool AirPlayHub::step_volume_(const RemoteState &remote) {
     if (steps == 0)
       break;
     const float before = this->reported_volume_.load(std::memory_order_relaxed);
-    if (!this->send_command_(remote, steps > 0 ? ::airplay::DACP_VOLUME_UP : ::airplay::DACP_VOLUME_DOWN))
+    if (this->send_command_(remote, steps > 0 ? ::airplay::DACP_VOLUME_UP : ::airplay::DACP_VOLUME_DOWN) == 0)
       return false;
     if (this->wait_for_report_(before, VOLUME_STEP_WAIT_MS)) {
       position = this->reported_volume_.load(std::memory_order_relaxed);

@@ -110,6 +110,11 @@ class AirPlayHub final : public Component, public ::airplay::AudioSink, public :
   /// @brief Pauses an AirPlay 2 sender and keeps its session, so that it can resume here.
   /// @return false if the sender cannot be paused this way (AirPlay 1).
   bool pause_sender();
+  /// @brief Whether the sender at `address` confirmed the pause of the last pause_sender() through remote control.
+  /// Music Assistant does, but keeps sending audio. THREAD CONTEXT: any
+  bool sender_confirmed_pause(uint32_t address) const {
+    return address != 0 && this->remote_paused_address_.load(std::memory_order_relaxed) == address;
+  }
   /// Drops the sender's audio as it arrives while its session stays, e.g. while another source has the speaker
   void set_audio_held(bool held) {
     if (this->receiver_ != nullptr)
@@ -169,8 +174,8 @@ class AirPlayHub final : public Component, public ::airplay::AudioSink, public :
   void handle_remote_requests_(uint8_t requests);
   /// THREAD CONTEXT: any. Queues remote control (DACP) requests and wakes the remote control task.
   void queue_remote_requests_(uint8_t requests);
-  /// @return false if the sender could not be reached
-  bool send_command_(const RemoteState &remote, const char *command);
+  /// @return the HTTP status of the sender's answer, 0 if it could not be reached
+  int send_command_(const RemoteState &remote, const char *command);
   bool adjust_volume_(const RemoteState &remote);
   bool step_volume_(const RemoteState &remote);
   bool wait_for_volume_(float target, uint32_t timeout_ms);
@@ -225,6 +230,8 @@ class AirPlayHub final : public Component, public ::airplay::AudioSink, public :
   std::atomic<float> reported_volume_{-1.0f};
   // The remote control task is moving the sender's volume; the sender's reports are not applied meanwhile
   std::atomic<bool> volume_adjusting_{false};
+  // The sender that last answered a remote control pause with success; 0 when none since pause_sender()
+  std::atomic<uint32_t> remote_paused_address_{0};
 
 #ifdef USE_AIRPLAY_METADATA
   ::airplay::Metadata metadata_{};  // Guarded by lock_
