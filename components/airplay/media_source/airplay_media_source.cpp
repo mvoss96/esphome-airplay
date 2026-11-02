@@ -7,6 +7,7 @@
 #include "esphome/core/log.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace esphome::airplay_ {
 
@@ -23,6 +24,8 @@ static constexpr uint32_t PAUSE_CHECK_ID = 1;
 static constexpr uint32_t PAUSE_CHECK_MS = 6000;
 /// A sender that was disconnected and connects again within this time did so by itself (Music Assistant does)
 static constexpr uint32_t AUTO_RECONNECT_MS = 30000;
+/// A volume this close to the one taken from the sender is that one coming back through the media player
+static constexpr float VOLUME_ECHO_TOLERANCE = 0.005f;
 
 void AirPlayMediaSource::setup() { this->disable_loop(); }
 
@@ -120,7 +123,7 @@ bool AirPlayMediaSource::play_uri(const std::string &uri) {
   }
   // Chosen on the device: the sender gets the speaker back
   this->set_claim_(SpeakerClaim::SPEAKER_CLAIM_OWNER);
-  this->follow_sender_from_ms_.store(millis() + SENDER_VOLUME_HOLD_MS, std::memory_order_relaxed);
+  this->hold_sender_volume_(SENDER_VOLUME_HOLD_MS);
   this->volume_address_ = this->parent_->get_sender_address();
   // The orchestrator restarts its count of played frames right after this call
   this->parent_->request_output_restart();
@@ -163,6 +166,19 @@ void AirPlayMediaSource::handle_command(media_source::MediaSourceCommand command
   }
   // Also works for a while after the sender disconnected: "play" then makes it reconnect
   this->parent_->send_remote_request(request);
+}
+
+void AirPlayMediaSource::hold_sender_volume_(uint32_t duration_ms) {
+  const uint32_t now = millis();
+  const uint32_t until = now + duration_ms;
+  uint32_t current = this->follow_sender_from_ms_.load(std::memory_order_relaxed);
+  while (true) {
+    // A hold that lasts longer already stays
+    if (static_cast<int32_t>(current - now) > 0 && static_cast<int32_t>(until - current) <= 0)
+      return;
+    if (this->follow_sender_from_ms_.compare_exchange_weak(current, until, std::memory_order_relaxed))
+      return;
+  }
 }
 
 bool AirPlayMediaSource::follows_sender_() const {
@@ -221,6 +237,9 @@ void AirPlayMediaSource::set_claim_(SpeakerClaim claim) {
 
 // THREAD CONTEXT: Main loop. The player tells every source; only the sender that has the speaker follows it.
 void AirPlayMediaSource::notify_volume_changed(float volume) {
+  // Changed on the device rather than taken from the sender: the sender is not followed for a moment
+  if (std::fabs(volume - this->sender_volume_.load(std::memory_order_relaxed)) > VOLUME_ECHO_TOLERANCE)
+    this->hold_sender_volume_(LOCAL_VOLUME_HOLD_MS);
   this->parent_->set_speaker_volume(volume, this->get_state() != media_source::MediaSourceState::IDLE);
 }
 

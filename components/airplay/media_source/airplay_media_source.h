@@ -39,14 +39,14 @@ class AirPlayMediaSource final : public AirPlayChild, public media_source::Media
   }
   void on_session_changed() { this->enable_loop_soon_any_context(); }
   /// The session ended; a sender that takes over next starts with the speaker's volume
-  void on_session_ended() {
-    this->follow_sender_from_ms_.store(millis() + SENDER_VOLUME_HOLD_MS, std::memory_order_relaxed);
-  }
+  void on_session_ended() { this->hold_sender_volume_(SENDER_VOLUME_HOLD_MS); }
   // The speaker's volume wins: the sender's volume is followed only while this source has the speaker, and not in the
   // first moments after it got it, when senders send the volume they start with
   void on_sender_volume(float volume) {
-    if (this->follows_sender_())
-      this->request_volume_(volume);
+    if (!this->follows_sender_())
+      return;
+    this->sender_volume_.store(volume, std::memory_order_relaxed);
+    this->request_volume_(volume);
   }
   void on_sender_mute(bool muted) {
     if (this->follows_sender_())
@@ -56,10 +56,15 @@ class AirPlayMediaSource final : public AirPlayChild, public media_source::Media
   /// After this source gets the speaker, the sender's volume is not followed for this long: senders send the volume
   /// they start with, and the speaker's volume is sent to them instead
   static constexpr uint32_t SENDER_VOLUME_HOLD_MS = 2000;
+  /// While the volume is changed on the device, and this long after, the sender's volume is not followed. Music
+  /// Assistant sends the volume back over AirPlay with a delay, which made the volume jump while the knob turned.
+  static constexpr uint32_t LOCAL_VOLUME_HOLD_MS = 1000;
 
  protected:
   /// THREAD CONTEXT: any
   bool follows_sender_() const;
+  /// Does not follow the sender's volume for `duration_ms` from now, or longer if already so. THREAD CONTEXT: any
+  void hold_sender_volume_(uint32_t duration_ms);
 
   /// Whether the AirPlay sender may have the speaker
   enum class SpeakerClaim : uint8_t {
@@ -86,7 +91,8 @@ class AirPlayMediaSource final : public AirPlayChild, public media_source::Media
   uint32_t declined_end_ms_{0};
   // The sender's volume is followed from this time on; set when this source gets the speaker
   std::atomic<uint32_t> follow_sender_from_ms_{0};
-  uint32_t volume_address_{0};  // The sender that was last given the speaker's volume; main loop only
+  std::atomic<float> sender_volume_{-1.0f};  // The volume last taken from the sender
+  uint32_t volume_address_{0};               // The sender that was last given the speaker's volume; main loop only
 };
 
 }  // namespace esphome::airplay_
