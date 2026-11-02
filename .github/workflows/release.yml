@@ -1,0 +1,27 @@
+name: Release
+
+# Started by hand: tags the current main as the given version and publishes a GitHub release for it
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version tag, e.g. v0.1.0
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Tag and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::Not a version: $VERSION"; exit 1; }
+          LIBRARY=$(grep '^AIRPLAY_CPP_VERSION' components/airplay/__init__.py | cut -d'"' -f2)
+          gh release create "$VERSION" --target "$GITHUB_SHA" --title "$VERSION" \
+            --notes "For ESPHome 2026.10.1 or newer, with airplay-cpp ${LIBRARY:0:7}."
