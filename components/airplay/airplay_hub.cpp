@@ -31,6 +31,8 @@ ESPHOME_LOG_TAG(TAG, "airplay");
 
 // The RSA operations of a new session need most of this stack
 static constexpr uint32_t AIRPLAY_TASK_STACK_SIZE = 8192;
+// AirPlay 2 pairing (SRP and Ed25519 arithmetic) needs more
+static constexpr uint32_t AIRPLAY2_TASK_STACK_SIZE = 12288;
 static constexpr uint32_t REMOTE_TASK_STACK_SIZE = 4096;
 static constexpr UBaseType_t REMOTE_TASK_PRIORITY = 2;
 static constexpr UBaseType_t AIRPLAY_TASK_PRIORITY = 5;
@@ -162,7 +164,8 @@ void AirPlayHub::setup() {
   // The AirPlay task comes last: once it runs, senders can connect
   if (!this->remote_task_.create(AirPlayHub::remote_task, "airplay_remote", REMOTE_TASK_STACK_SIZE, this,
                                  REMOTE_TASK_PRIORITY, this->task_stack_in_psram_) ||
-      !this->airplay_task_.create(AirPlayHub::airplay_task, "airplay", AIRPLAY_TASK_STACK_SIZE, this,
+      !this->airplay_task_.create(AirPlayHub::airplay_task, "airplay",
+                                  this->airplay2_ ? AIRPLAY2_TASK_STACK_SIZE : AIRPLAY_TASK_STACK_SIZE, this,
                                   AIRPLAY_TASK_PRIORITY, this->task_stack_in_psram_)) {
     ESP_LOGE(TAG, "Failed to create tasks");
     this->mark_failed();
@@ -204,8 +207,11 @@ void AirPlayHub::remote_task(void *params) {
   while (true) {
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
     const uint8_t requests = self->remote_requests_.exchange(0, std::memory_order_acq_rel);
-    if (requests != 0)
+    if (requests != 0) {
       self->handle_remote_requests_(requests);
+      ESP_LOGV(TAG, "Remote control task stack: %u bytes never used",
+               static_cast<unsigned>(uxTaskGetStackHighWaterMark(nullptr)));
+    }
   }
 }
 
@@ -446,6 +452,9 @@ size_t AirPlayHub::write(const int16_t *samples, size_t frames) {
 void AirPlayHub::on_session_state(::airplay::SessionState state) {
   SlowCallLog slow_call(LOG_STR_LITERAL("Session state change"));
   if (state == ::airplay::SessionState::NONE) {
+    // How close pairing and playback came to the end of the stack
+    ESP_LOGD(TAG, "AirPlay task stack: %u bytes never used",
+             static_cast<unsigned>(uxTaskGetStackHighWaterMark(nullptr)));
     this->sender_volume_.store(-1.0f, std::memory_order_relaxed);
     this->reported_volume_.store(-1.0f, std::memory_order_relaxed);
     // Keep the remote control details for a while, so that a paused sender can be resumed from here
