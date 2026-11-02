@@ -58,6 +58,6 @@ jobs:
   interop:
     # Streams from independent AirPlay 1 and 2 senders to the pinned library
     needs: library
-    uses: mvoss96/airplay-cpp/.github/workflows/interop.yml@airplay2
+    uses: mvoss96/airplay-cpp/.github/workflows/interop.yml@main
     with:
       ref: ${{ needs.library.outputs.ref }}
