@@ -90,6 +90,10 @@ class AirPlayHub final : public Component, public ::airplay::AudioSink, public :
   template<typename F> void add_metadata_callback(F &&callback) {
     this->metadata_callback_.add(std::forward<F>(callback));
   }
+  /// Called on the main loop with the device name of the sender that plays, e.g. "Kitchen iPad"; empty when none
+  template<typename F> void add_sender_name_callback(F &&callback) {
+    this->sender_name_callback_.add(std::forward<F>(callback));
+  }
 #endif
 
   // ===== For the media source; main loop unless noted =====
@@ -131,6 +135,7 @@ class AirPlayHub final : public Component, public ::airplay::AudioSink, public :
   void on_metadata(const ::airplay::Metadata &metadata) override;
   void on_progress(const ::airplay::Progress &progress) override;
   void on_remote_target(const ::airplay::RemoteTarget &target) override;
+  void on_sender_name(const char *name) override;
 #ifdef USE_AIRPLAY_ARTWORK
   bool on_artwork_begin(::airplay::ArtworkFormat format, size_t size) override;
   void on_artwork_data(const uint8_t *data, size_t length) override;
@@ -225,6 +230,9 @@ class AirPlayHub final : public Component, public ::airplay::AudioSink, public :
   ::airplay::Metadata metadata_{};  // Guarded by lock_
   std::atomic<bool> metadata_changed_{false};
   LazyCallbackManager<void(const ::airplay::Metadata &)> metadata_callback_;
+  char sender_name_[::airplay::SENDER_NAME_SIZE]{};  // Guarded by lock_
+  std::atomic<bool> sender_name_changed_{false};
+  LazyCallbackManager<void(const char *)> sender_name_callback_;
 #endif
 
 #ifdef USE_AIRPLAY_PROGRESS

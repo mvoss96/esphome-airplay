@@ -9,6 +9,13 @@ namespace esphome::airplay_ {
 ESPHOME_LOG_TAG(TAG, "airplay.text_sensor");
 
 void AirPlayTextSensor::setup() {
+  if (this->metadata_type_ == AirPlayMetadataType::AIRPLAY_METADATA_TYPE_SENDER) {
+    this->parent_->add_sender_name_callback([this](const char *name) {
+      if (this->state != name)
+        this->publish_state(name);
+    });
+    return;
+  }
   this->parent_->add_metadata_callback([this](const ::airplay::Metadata &metadata) {
     const char *value;
     switch (this->metadata_type_) {

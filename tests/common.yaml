@@ -46,6 +46,9 @@ text_sensor:
   - platform: airplay
     type: album_artist
     name: AirPlay Album Artist
+  - platform: airplay
+    type: sender
+    name: AirPlay Sender
 
 sensor:
   - platform: airplay

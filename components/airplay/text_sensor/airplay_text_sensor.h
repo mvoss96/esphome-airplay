@@ -14,9 +14,10 @@ enum class AirPlayMetadataType : uint8_t {
   AIRPLAY_METADATA_TYPE_ARTIST,
   AIRPLAY_METADATA_TYPE_ALBUM,
   AIRPLAY_METADATA_TYPE_ALBUM_ARTIST,
+  AIRPLAY_METADATA_TYPE_SENDER,  // Device name of the sender
 };
 
-/// A detail of the track that plays over AirPlay; empty when no track plays
+/// A detail of the track that plays over AirPlay, or the sender's device name; empty when nothing plays
 class AirPlayTextSensor final : public AirPlayChild, public text_sensor::TextSensor {
  public:
   void setup() override;

@@ -12,8 +12,8 @@ not disconnected: it stays connected and gets the speaker back as soon as it pla
 has to be selected again on the phone.
 
 Playback follows the sender's clock, so sound stays in sync with video. Volume works both ways, and the media
-player's play, pause, next and previous reach the sender. Track title, artist, album, position and the cover art
-are available as sensors and as an image for LVGL or any display.
+player's play, pause, next and previous reach the sender. Track title, artist, album, position, the name of the
+sending device and the cover art are available as sensors and as an image for LVGL or any display.
 
 ## Usage
 

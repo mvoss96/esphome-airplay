@@ -22,6 +22,7 @@
 #include <algorithm>
 #include <cinttypes>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 
 namespace esphome::airplay_ {
@@ -268,6 +269,13 @@ void AirPlayHub::loop() {
     xSemaphoreGive(this->lock_);
     this->metadata_callback_.call(metadata);
   }
+  if (this->sender_name_changed_.exchange(false, std::memory_order_acq_rel)) {
+    char name[::airplay::SENDER_NAME_SIZE];
+    xSemaphoreTake(this->lock_, portMAX_DELAY);
+    std::memcpy(name, this->sender_name_, sizeof(name));
+    xSemaphoreGive(this->lock_);
+    this->sender_name_callback_.call(name);
+  }
 #endif
   this->disable_loop();
 }
@@ -480,6 +488,18 @@ void AirPlayHub::on_metadata(const ::airplay::Metadata &metadata) {
   this->metadata_ = metadata;
   xSemaphoreGive(this->lock_);
   this->metadata_changed_.store(true, std::memory_order_release);
+  this->enable_loop_soon_any_context();
+#endif
+}
+
+void AirPlayHub::on_sender_name(const char *name) {
+  if (name[0] != '\0')
+    ESP_LOGD(TAG, "Sender: %s", name);
+#ifdef USE_AIRPLAY_METADATA
+  xSemaphoreTake(this->lock_, portMAX_DELAY);
+  std::snprintf(this->sender_name_, sizeof(this->sender_name_), "%s", name);
+  xSemaphoreGive(this->lock_);
+  this->sender_name_changed_.store(true, std::memory_order_release);
   this->enable_loop_soon_any_context();
 #endif
 }

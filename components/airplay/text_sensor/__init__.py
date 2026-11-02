@@ -13,6 +13,7 @@ DEPENDENCIES = ["airplay"]
 CONF_ALBUM = "album"
 CONF_ALBUM_ARTIST = "album_artist"
 CONF_ARTIST = "artist"
+CONF_SENDER = "sender"
 
 AirPlayTextSensor = airplay_ns.class_(
     "AirPlayTextSensor", text_sensor.TextSensor, cg.Component
@@ -24,12 +25,14 @@ METADATA_TYPES = {
     CONF_ARTIST: AirPlayMetadataType.AIRPLAY_METADATA_TYPE_ARTIST,
     CONF_ALBUM: AirPlayMetadataType.AIRPLAY_METADATA_TYPE_ALBUM,
     CONF_ALBUM_ARTIST: AirPlayMetadataType.AIRPLAY_METADATA_TYPE_ALBUM_ARTIST,
+    CONF_SENDER: AirPlayMetadataType.AIRPLAY_METADATA_TYPE_SENDER,
 }
 ICONS = {
     CONF_TITLE: "mdi:music",
     CONF_ARTIST: "mdi:account-music",
     CONF_ALBUM: "mdi:album",
     CONF_ALBUM_ARTIST: "mdi:account-music",
+    CONF_SENDER: "mdi:cellphone-sound",
 }
 
 _HUB_ID_SCHEMA = cv.Schema({cv.GenerateID(CONF_AIRPLAY_ID): cv.use_id(AirPlayHub)})
