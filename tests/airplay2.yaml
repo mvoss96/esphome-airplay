@@ -1,0 +1,70 @@
+# AirPlay 2 with cover art on an LVGL display, on an ESP32-S3 with PSRAM
+substitutions:
+  i2s_lrclk_pin: GPIO4
+  i2s_bclk_pin: GPIO5
+  i2s_dout_pin: GPIO6
+
+esphome:
+  name: airplay-test-2
+
+esp32:
+  board: esp32-s3-devkitc-1
+  variant: esp32s3
+  flash_size: 8MB
+  framework:
+    type: esp-idf
+
+packages:
+  common: !include common.yaml
+
+psram:
+  mode: octal
+
+airplay:
+  id: airplay_hub
+  task_stack_in_psram: true
+  airplay2: true
+
+media_source:
+  - platform: airplay
+    id: airplay_source
+
+spi:
+  - id: spi_bus
+    clk_pin: GPIO12
+    mosi_pin: GPIO11
+
+display:
+  - platform: ili9xxx
+    spi_id: spi_bus
+    id: main_lcd
+    model: ili9342
+    cs_pin: GPIO13
+    dc_pin: GPIO14
+    reset_pin: GPIO15
+    invert_colors: true
+    auto_clear_enabled: false
+
+lvgl:
+  displays:
+    - main_lcd
+  widgets:
+    - image:
+        id: cover_widget
+        src: airplay_cover
+        hidden: true
+
+image:
+  - platform: airplay
+    id: airplay_cover
+    type: RGB565
+    resize: 64x64
+    on_image_update:
+      - lvgl.image.update:
+          id: cover_widget
+          src: airplay_cover
+      - lvgl.widget.show: cover_widget
+    on_image_clear:
+      - lvgl.widget.hide: cover_widget
+    on_image_error:
+      - logger.log: Cover art could not be decoded

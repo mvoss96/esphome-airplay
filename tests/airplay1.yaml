@@ -1,0 +1,28 @@
+# AirPlay 1 only, with a password, on an ESP32 without PSRAM
+substitutions:
+  i2s_lrclk_pin: GPIO25
+  i2s_bclk_pin: GPIO26
+  i2s_dout_pin: GPIO22
+
+esphome:
+  name: airplay-test-1
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+packages:
+  common: !include common.yaml
+
+airplay:
+  id: airplay_hub
+  name: ESPHome Speaker
+  model: Test Speaker
+  password: secret
+  port: 5000
+
+media_source:
+  - platform: airplay
+    id: airplay_source
+    buffer_duration: 750ms

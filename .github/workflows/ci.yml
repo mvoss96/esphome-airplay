@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+env:
+  # The stable ESPHome release the component is built against
+  ESPHOME_VERSION: "2026.10.1"
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Check formatting
+        run: |
+          pip install ruff clang-format==13.0.1
+          ruff format --check components
+          ruff check components
+          find components -name '*.cpp' -o -name '*.h' | xargs clang-format --dry-run --Werror
+
+  compile:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        test: [airplay1, airplay2]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: platformio-${{ env.ESPHOME_VERSION }}-${{ matrix.test }}
+      - name: Install ESPHome
+        run: pip install "esphome==${ESPHOME_VERSION}"
+      - name: Validate
+        run: esphome config tests/${{ matrix.test }}.yaml
+      - name: Compile
+        run: esphome compile tests/${{ matrix.test }}.yaml
+
+  library:
+    # The airplay-cpp version pinned in components/airplay/__init__.py
+    runs-on: ubuntu-latest
+    outputs:
+      ref: ${{ steps.pin.outputs.ref }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: pin
+        run: echo "ref=$(grep '^AIRPLAY_CPP_VERSION' components/airplay/__init__.py | cut -d'"' -f2)" >> "$GITHUB_OUTPUT"
+
+  interop:
+    # Streams from independent AirPlay 1 and 2 senders to the pinned library
+    needs: library
+    uses: mvoss96/airplay-cpp/.github/workflows/interop.yml@airplay2
+    with:
+      ref: ${{ needs.library.outputs.ref }}
