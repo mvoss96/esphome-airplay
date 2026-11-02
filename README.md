@@ -19,7 +19,7 @@ are available as sensors and as an image for LVGL or any display.
 
 ```yaml
 external_components:
-  - source: github://mvoss96/esphome-airplay@main
+  - source: github://mvoss96/esphome-airplay@v0.1.0
     components: [airplay]
 
 airplay:
@@ -37,8 +37,7 @@ media_player:
       sources: [airplay_source]
 ```
 
-Pin a tag or a full commit hash instead of `main` for builds that should not change by themselves; ESPHome does
-not accept short hashes. [tests/](tests) has complete
+Use a tag, `main` or a full commit hash; ESPHome does not accept short hashes. [tests/](tests) has complete
 configurations with all sensors, the cover art and the actions `airplay.play`, `pause`, `next` and `previous`.
 
 | `airplay` option | Default | |
