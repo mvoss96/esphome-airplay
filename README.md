@@ -37,7 +37,8 @@ media_player:
       sources: [airplay_source]
 ```
 
-Pin a commit instead of `main` for builds that should not change by themselves. [tests/](tests) has complete
+Pin a tag or a full commit hash instead of `main` for builds that should not change by themselves; ESPHome does
+not accept short hashes. [tests/](tests) has complete
 configurations with all sensors, the cover art and the actions `airplay.play`, `pause`, `next` and `previous`.
 
 | `airplay` option | Default | |
