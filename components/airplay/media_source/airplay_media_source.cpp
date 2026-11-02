@@ -3,6 +3,7 @@
 #ifdef USE_ESP32
 
 #include "esphome/core/application.h"
+#include "esphome/core/hal.h"
 #include "esphome/core/log.h"
 
 #include <algorithm>
@@ -65,6 +66,15 @@ void AirPlayMediaSource::loop() {
     }
   }
 
+  // Another sender took over while this source keeps the speaker: it gets the speaker's volume too
+  if (desired != ::airplay::SessionState::NONE && state != media_source::MediaSourceState::IDLE) {
+    const uint32_t address = this->parent_->get_sender_address();
+    if (address != this->volume_address_) {
+      this->volume_address_ = address;
+      this->parent_->send_speaker_volume();
+    }
+  }
+
   switch (desired) {
     case ::airplay::SessionState::NONE:
       this->play_requested_ = false;
@@ -110,6 +120,8 @@ bool AirPlayMediaSource::play_uri(const std::string &uri) {
   }
   // Chosen on the device: the sender gets the speaker back
   this->set_claim_(SpeakerClaim::SPEAKER_CLAIM_OWNER);
+  this->follow_sender_from_ms_.store(millis() + SENDER_VOLUME_HOLD_MS, std::memory_order_relaxed);
+  this->volume_address_ = this->parent_->get_sender_address();
   // The orchestrator restarts its count of played frames right after this call
   this->parent_->request_output_restart();
   this->parent_->send_speaker_volume();
@@ -151,6 +163,12 @@ void AirPlayMediaSource::handle_command(media_source::MediaSourceCommand command
   }
   // Also works for a while after the sender disconnected: "play" then makes it reconnect
   this->parent_->send_remote_request(request);
+}
+
+bool AirPlayMediaSource::follows_sender_() const {
+  if (this->get_state() == media_source::MediaSourceState::IDLE)
+    return false;
+  return static_cast<int32_t>(millis() - this->follow_sender_from_ms_.load(std::memory_order_relaxed)) >= 0;
 }
 
 // THREAD CONTEXT: Main loop

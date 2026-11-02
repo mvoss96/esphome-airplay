@@ -452,6 +452,8 @@ size_t AirPlayHub::write(const int16_t *samples, size_t frames) {
 void AirPlayHub::on_session_state(::airplay::SessionState state) {
   SlowCallLog slow_call(LOG_STR_LITERAL("Session state change"));
   if (state == ::airplay::SessionState::NONE) {
+    if (this->media_source_ != nullptr)
+      this->media_source_->on_session_ended();
     // How close pairing and playback came to the end of the stack
     ESP_LOGD(TAG, "AirPlay task stack: %u bytes never used",
              static_cast<unsigned>(uxTaskGetStackHighWaterMark(nullptr)));

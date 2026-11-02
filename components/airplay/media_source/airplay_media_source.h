@@ -7,7 +7,9 @@
 #include "esphome/components/airplay/airplay_hub.h"
 #include "esphome/components/audio/audio.h"
 #include "esphome/components/media_source/media_source.h"
+#include "esphome/core/hal.h"
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -36,10 +38,29 @@ class AirPlayMediaSource final : public AirPlayChild, public media_source::Media
     return this->write_output(data, length, 0, this->stream_info_);
   }
   void on_session_changed() { this->enable_loop_soon_any_context(); }
-  void on_sender_volume(float volume) { this->request_volume_(volume); }
-  void on_sender_mute(bool muted) { this->request_mute_(muted); }
+  /// The session ended; a sender that takes over next starts with the speaker's volume
+  void on_session_ended() {
+    this->follow_sender_from_ms_.store(millis() + SENDER_VOLUME_HOLD_MS, std::memory_order_relaxed);
+  }
+  // The speaker's volume wins: the sender's volume is followed only while this source has the speaker, and not in the
+  // first moments after it got it, when senders send the volume they start with
+  void on_sender_volume(float volume) {
+    if (this->follows_sender_())
+      this->request_volume_(volume);
+  }
+  void on_sender_mute(bool muted) {
+    if (this->follows_sender_())
+      this->request_mute_(muted);
+  }
+
+  /// After this source gets the speaker, the sender's volume is not followed for this long: senders send the volume
+  /// they start with, and the speaker's volume is sent to them instead
+  static constexpr uint32_t SENDER_VOLUME_HOLD_MS = 2000;
 
  protected:
+  /// THREAD CONTEXT: any
+  bool follows_sender_() const;
+
   /// Whether the AirPlay sender may have the speaker
   enum class SpeakerClaim : uint8_t {
     /// It may: its session takes the speaker when it starts playing. Also when no sender is connected.
@@ -63,6 +84,9 @@ class AirPlayMediaSource final : public AirPlayChild, public media_source::Media
   uint32_t declined_address_{0};
   // When a declined sender disconnected; 0 while it is connected
   uint32_t declined_end_ms_{0};
+  // The sender's volume is followed from this time on; set when this source gets the speaker
+  std::atomic<uint32_t> follow_sender_from_ms_{0};
+  uint32_t volume_address_{0};  // The sender that was last given the speaker's volume; main loop only
 };
 
 }  // namespace esphome::airplay_
