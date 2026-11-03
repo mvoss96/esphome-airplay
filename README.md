@@ -19,7 +19,7 @@ sending device and the cover art are available as sensors and as an image for LV
 
 ```yaml
 external_components:
-  - source: github://mvoss96/esphome-airplay@v0.1.0
+  - source: github://mvoss96/esphome-airplay@v0.2.0
     components: [airplay]
 
 airplay:
