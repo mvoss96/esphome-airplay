@@ -149,6 +149,7 @@ void AirPlayHub::setup() {
   config.progress = true;
 #endif
   config.airplay2 = this->airplay2_;
+  config.ptp = this->ptp_;
   config.airplay2_features = this->airplay2_features_;
 #if (configUSE_TRACE_FACILITY == 1) && (configGENERATE_RUN_TIME_STATS == 1)
   // Measures the time spent on each audio packet, for the CPU log

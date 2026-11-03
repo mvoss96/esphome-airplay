@@ -27,12 +27,13 @@ DOMAIN = "airplay"
 
 CONF_AIRPLAY_ID = "airplay_id"
 CONF_AIRPLAY2 = "airplay2"
+CONF_PTP = "ptp"
 CONF_AIRPLAY2_FEATURES = "airplay2_features"
 CONF_AAC_BUFFER_SIZE = "aac_buffer_size"
 
 # The AirPlay protocol is handled by the airplay-cpp library
 AIRPLAY_CPP_REPO = "https://github.com/mvoss96/airplay-cpp.git"
-AIRPLAY_CPP_VERSION = "7d47f27f773b3add8497bcbe11e10ed1dd052722"
+AIRPLAY_CPP_VERSION = "17554ce910c29cd64c3576efd8fbcbfdb44f7259"
 
 # Room for a burst of audio packets between two reads of a UDP socket
 UDP_RECEIVE_QUEUE_SIZE = 32
@@ -54,6 +55,8 @@ def _validate_airplay2(config: ConfigType) -> ConfigType:
             f"'{CONF_AIRPLAY2}' cannot be used with '{CONF_PASSWORD}'",
             path=[CONF_AIRPLAY2],
         )
+    if config[CONF_PTP] and not config[CONF_AIRPLAY2]:
+        raise cv.Invalid(f"'{CONF_PTP}' needs '{CONF_AIRPLAY2}'", path=[CONF_PTP])
     return config
 
 
@@ -71,7 +74,10 @@ def _consume_sockets(config: ConfigType) -> ConfigType:
     # of a playback session
     socket.consume_sockets(1, DOMAIN, socket.SocketType.TCP_LISTEN)(config)
     socket.consume_sockets(7 if config[CONF_AIRPLAY2] else 3, DOMAIN)(config)
-    socket.consume_sockets(3, DOMAIN, socket.SocketType.UDP)(config)
+    # PTP adds its two ports
+    socket.consume_sockets(5 if config[CONF_PTP] else 3, DOMAIN, socket.SocketType.UDP)(
+        config
+    )
     return config
 
 
@@ -89,6 +95,7 @@ CONFIG_SCHEMA = cv.All(
             # Experimental: AirPlay 2 with realtime audio; senders without AirPlay 1
             # (e.g. current iOS) need it
             cv.Optional(CONF_AIRPLAY2, default=False): cv.boolean,
+            cv.Optional(CONF_PTP, default=False): cv.boolean,
             # For experiments: the AirPlay 2 feature bits to announce
             cv.Optional(CONF_AIRPLAY2_FEATURES): cv.hex_uint64_t,
             # Compressed audio that AirPlay 2 senders send ahead (AAC at 256 kbit/s
@@ -168,6 +175,8 @@ async def to_code(config: ConfigType) -> None:
         cg.add_define("USE_AIRPLAY_AAC")
         cg.add(var.set_aac_buffer_size(config[CONF_AAC_BUFFER_SIZE]))
         esp32.add_idf_component(name="espressif/esp_audio_codec", ref="2.5.0")
+    if config[CONF_PTP]:
+        cg.add(var.set_ptp(True))
     if (features := config.get(CONF_AIRPLAY2_FEATURES)) is not None:
         cg.add(var.set_airplay2_features(features))
 
