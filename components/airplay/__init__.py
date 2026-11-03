@@ -33,7 +33,7 @@ CONF_AAC_BUFFER_SIZE = "aac_buffer_size"
 
 # The AirPlay protocol is handled by the airplay-cpp library
 AIRPLAY_CPP_REPO = "https://github.com/mvoss96/airplay-cpp.git"
-AIRPLAY_CPP_VERSION = "019bb32c73ee4e94276608063d92fc469748d692"
+AIRPLAY_CPP_VERSION = "e1b276bd8e297e4802a444e117e37fcdbccd14e2"
 
 # Room for a burst of audio packets between two reads of a UDP socket
 UDP_RECEIVE_QUEUE_SIZE = 32
@@ -55,6 +55,8 @@ def _validate_airplay2(config: ConfigType) -> ConfigType:
             f"'{CONF_AIRPLAY2}' cannot be used with '{CONF_PASSWORD}'",
             path=[CONF_AIRPLAY2],
         )
+    # PTP timing comes with AirPlay 2 unless turned off: macOS streams only with it
+    config.setdefault(CONF_PTP, config[CONF_AIRPLAY2])
     if config[CONF_PTP] and not config[CONF_AIRPLAY2]:
         raise cv.Invalid(f"'{CONF_PTP}' needs '{CONF_AIRPLAY2}'", path=[CONF_PTP])
     return config
@@ -95,7 +97,7 @@ CONFIG_SCHEMA = cv.All(
             # Experimental: AirPlay 2 with realtime audio; senders without AirPlay 1
             # (e.g. current iOS) need it
             cv.Optional(CONF_AIRPLAY2, default=False): cv.boolean,
-            cv.Optional(CONF_PTP, default=False): cv.boolean,
+            cv.Optional(CONF_PTP): cv.boolean,
             # For experiments: the AirPlay 2 feature bits to announce
             cv.Optional(CONF_AIRPLAY2_FEATURES): cv.hex_uint64_t,
             # Compressed audio that AirPlay 2 senders send ahead (AAC at 256 kbit/s

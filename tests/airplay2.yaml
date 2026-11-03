@@ -28,7 +28,6 @@ airplay:
   id: airplay_hub
   task_stack_in_psram: true
   airplay2: true
-  ptp: true
 
 media_source:
   - platform: airplay
