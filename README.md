@@ -44,6 +44,7 @@ configurations with all sensors, the cover art and the actions `airplay.play`, `
 |---|---|---|
 | `name` | friendly name | Name in the sender's speaker list |
 | `airplay2` | `false` | Offer AirPlay 2 |
+| `ptp` | `false` | AirPlay 2 timing with PTP, which macOS needs; uses UDP ports 319 and 320 |
 | `password` | none | AirPlay 1 only |
 | `task_stack_in_psram` | `false` | Saves 8 KB of internal RAM |
 
