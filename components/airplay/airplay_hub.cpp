@@ -16,6 +16,7 @@
 #endif
 
 #include <esp_heap_caps.h>
+#include <esp_timer.h>
 #include <freertos/task.h>
 #include <mdns.h>
 
@@ -148,6 +149,10 @@ void AirPlayHub::setup() {
 #endif
   config.airplay2 = this->airplay2_;
   config.airplay2_features = this->airplay2_features_;
+#if (configUSE_TRACE_FACILITY == 1) && (configGENERATE_RUN_TIME_STATS == 1)
+  // Measures the time spent on each audio packet, for the CPU log
+  config.clock_us = []() -> int64_t { return esp_timer_get_time(); };
+#endif
 #ifdef USE_AIRPLAY_AAC
   config.aac_decoder = &this->aac_decoder_;
   config.buffered_audio_bytes = this->aac_buffer_size_;
@@ -263,6 +268,8 @@ void AirPlayHub::log_task_cpu_() {
                                                 this->task_status_[i].ulRunTimeCounter};
   if (this->get_session_state() == ::airplay::SessionState::NONE) {
     this->runner_.take_timing();
+    if (this->receiver_ != nullptr)
+      this->receiver_->take_packet_timing();
     this->output_us_.store(0, std::memory_order_relaxed);
     this->output_calls_.store(0, std::memory_order_relaxed);
     this->output_max_us_.store(0, std::memory_order_relaxed);
@@ -282,8 +289,17 @@ void AirPlayHub::log_task_cpu_() {
   const ::airplay::SocketRunner::Timing timing = this->runner_.take_timing();
   ESP_LOGD(TAG,
            "AirPlay task in the last %" PRIu32 " s: %" PRIu32 " loops, waiting %" PRIu32 " ms, UDP %" PRIu32
-           " ms, TCP %" PRIu32 " ms, poll %" PRIu32 " ms",
-           TASK_CPU_INTERVAL_MS / 1000, timing.loops, timing.wait_ms, timing.udp_ms, timing.tcp_ms, timing.poll_ms);
+           " ms (recvfrom %" PRIu32 " ms), TCP %" PRIu32 " ms, poll %" PRIu32 " ms",
+           TASK_CPU_INTERVAL_MS / 1000, timing.loops, timing.wait_ms, timing.udp_ms, timing.recv_ms, timing.tcp_ms,
+           timing.poll_ms);
+  if (this->receiver_ == nullptr)
+    return;
+  const ::airplay::Receiver::PacketTiming packets = this->receiver_->take_packet_timing();
+  ESP_LOGD(TAG,
+           "AirPlay packets in the last %" PRIu32 " s: %" PRIu32 ", handling %" PRIu32
+           " ms, of that decrypting %" PRIu32 " ms, decoding %" PRIu32 " ms",
+           TASK_CPU_INTERVAL_MS / 1000, packets.packets, packets.total_us / 1000, packets.decrypt_us / 1000,
+           packets.decode_us / 1000);
   ESP_LOGD(TAG,
            "AirPlay output in the last %" PRIu32 " s: %" PRIu32 " ms in %" PRIu32 " writes, longest %" PRIu32 " ms",
            TASK_CPU_INTERVAL_MS / 1000, this->output_us_.exchange(0, std::memory_order_relaxed) / 1000,
