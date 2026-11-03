@@ -216,6 +216,25 @@ void AirPlayHub::airplay_task(void *params) {
 }
 
 #if (configUSE_TRACE_FACILITY == 1) && (configGENERATE_RUN_TIME_STATS == 1)
+// THREAD CONTEXT: AirPlay task. Adds up the time of a write to the output.
+class AirPlayHub::OutputTime {
+ public:
+  explicit OutputTime(AirPlayHub *hub) : hub_(hub), start_(micros()) {}
+  ~OutputTime() {
+    const uint32_t took = micros() - this->start_;
+    this->hub_->output_us_.fetch_add(took, std::memory_order_relaxed);
+    this->hub_->output_calls_.fetch_add(1, std::memory_order_relaxed);
+    if (took > this->hub_->output_max_us_.load(std::memory_order_relaxed))
+      this->hub_->output_max_us_.store(took, std::memory_order_relaxed);
+  }
+  OutputTime(const OutputTime &) = delete;
+  OutputTime &operator=(const OutputTime &) = delete;
+
+ protected:
+  AirPlayHub *hub_;
+  uint32_t start_;
+};
+
 // THREAD CONTEXT: Main loop
 void AirPlayHub::log_task_cpu_() {
   RunTime total = 0;
@@ -242,8 +261,12 @@ void AirPlayHub::log_task_cpu_() {
   for (UBaseType_t i = 0; i < count; i++)
     this->task_cpu_[this->task_cpu_count_++] = {this->task_status_[i].xTaskNumber,
                                                 this->task_status_[i].ulRunTimeCounter};
-  if (this->get_session_state() == ::airplay::SessionState::NONE)
+  if (this->get_session_state() == ::airplay::SessionState::NONE) {
+    this->output_us_.store(0, std::memory_order_relaxed);
+    this->output_calls_.store(0, std::memory_order_relaxed);
+    this->output_max_us_.store(0, std::memory_order_relaxed);
     return;
+  }
   std::sort(used, used + used_count, [](const Used &a, const Used &b) { return a.time > b.time; });
   char line[256];
   size_t length = 0;
@@ -255,6 +278,11 @@ void AirPlayHub::log_task_cpu_() {
     length += static_cast<size_t>(written);
   }
   ESP_LOGD(TAG, "CPU in the last %" PRIu32 " s (ms): %s", TASK_CPU_INTERVAL_MS / 1000, line);
+  ESP_LOGD(TAG,
+           "AirPlay output in the last %" PRIu32 " s: %" PRIu32 " ms in %" PRIu32 " writes, longest %" PRIu32 " ms",
+           TASK_CPU_INTERVAL_MS / 1000, this->output_us_.exchange(0, std::memory_order_relaxed) / 1000,
+           this->output_calls_.exchange(0, std::memory_order_relaxed),
+           this->output_max_us_.exchange(0, std::memory_order_relaxed) / 1000);
 }
 #endif
 
@@ -481,6 +509,9 @@ void AirPlayHub::notify_played(uint32_t frames, int64_t timestamp) {
 // ===== AirPlay task =====
 
 size_t AirPlayHub::write(const int16_t *samples, size_t frames) {
+#if (configUSE_TRACE_FACILITY == 1) && (configGENERATE_RUN_TIME_STATS == 1)
+  OutputTime output_time(this);
+#endif
   SlowCallLog slow_call(LOG_STR_LITERAL("Audio output"));
   if (this->media_source_ == nullptr)
     return frames;

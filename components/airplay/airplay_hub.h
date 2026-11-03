@@ -171,11 +171,16 @@ class AirPlayHub final : public Component, public ::airplay::AudioSink, public :
 #if (configUSE_TRACE_FACILITY == 1) && (configGENERATE_RUN_TIME_STATS == 1)
   /// Logs the CPU time each task used since the last call, while a sender is connected
   void log_task_cpu_();
+  class OutputTime;
   using RunTime = decltype(TaskStatus_t::ulRunTimeCounter);
   struct TaskCpu {
     UBaseType_t number;
     RunTime runtime;
   };
+  // Time the AirPlay task spent writing to the output (the speaker path, e.g. an equalizer that filters in place)
+  std::atomic<uint32_t> output_us_{0};
+  std::atomic<uint32_t> output_max_us_{0};
+  std::atomic<uint32_t> output_calls_{0};
   TaskStatus_t *task_status_{nullptr};
   TaskCpu *task_cpu_{nullptr};
   size_t task_cpu_count_{0};
