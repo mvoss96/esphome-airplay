@@ -190,12 +190,12 @@ bool AirPlayMediaSource::follows_sender_() const {
 // THREAD CONTEXT: Main loop
 void AirPlayMediaSource::decline_sender_() {
   if (!this->parent_->pause_sender()) {
-    // AirPlay 1
+    // Nothing reaches the sender (an AirPlay 1 sender without remote control)
     this->parent_->request_disconnect();
     return;
   }
-  // AirPlay 2: iOS keeps its route to a receiver that disconnects and does not connect again by itself. Paused
-  // instead, the sender stays connected and can resume here.
+  // iOS keeps its route to a receiver that disconnects and does not connect again by itself, with AirPlay 1 and 2.
+  // Paused instead, the sender stays connected and can resume here.
   ESP_LOGI(TAG, "Pausing the sender");
   this->declined_address_ = this->parent_->get_sender_address();
   this->declined_end_ms_ = 0;

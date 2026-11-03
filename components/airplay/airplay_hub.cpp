@@ -496,15 +496,18 @@ void AirPlayHub::queue_remote_requests_(uint8_t requests) {
 }
 
 bool AirPlayHub::pause_sender() {
-  if (this->receiver_ == nullptr ||
-      !this->receiver_->request_sender_command(::airplay::SenderCommand::SENDER_COMMAND_PAUSE))
+  if (this->receiver_ == nullptr)
     return false;
-  this->remote_paused_address_.store(0, std::memory_order_relaxed);
-  // Also through remote control: Music Assistant reads the event connection only of Apple devices, but takes DACP
+  // AirPlay 2 senders take it on their event connection. Through remote control (DACP) as well: AirPlay 1 senders
+  // have nothing else, and Music Assistant reads the event connection only of Apple devices.
+  const bool event = this->receiver_->request_sender_command(::airplay::SenderCommand::SENDER_COMMAND_PAUSE);
   xSemaphoreTake(this->lock_, portMAX_DELAY);
   const bool has_remote = this->remote_.session_active && this->remote_.target.dacp_id[0] != '\0' &&
                           this->remote_.target.active_remote[0] != '\0';
   xSemaphoreGive(this->lock_);
+  if (!event && !has_remote)
+    return false;
+  this->remote_paused_address_.store(0, std::memory_order_relaxed);
   if (has_remote)
     this->queue_remote_requests_(REMOTE_REQUEST_PAUSE);
   return true;

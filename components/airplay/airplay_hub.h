@@ -108,8 +108,9 @@ class AirPlayHub final : public Component, public ::airplay::AudioSink, public :
   void request_disconnect();
   /// IPv4 address (network byte order) of the sender that owns the session, 0 if none. THREAD CONTEXT: any
   uint32_t get_sender_address() const { return this->receiver_ != nullptr ? this->receiver_->sender_address() : 0; }
-  /// @brief Pauses an AirPlay 2 sender and keeps its session, so that it can resume here.
-  /// @return false if the sender cannot be paused this way (AirPlay 1).
+  /// @brief Pauses the sender and keeps its session, so that it can resume here: on the AirPlay 2 event connection
+  /// and through remote control (DACP).
+  /// @return false if neither reaches the sender.
   bool pause_sender();
   /// @brief Whether the sender at `address` confirmed the pause of the last pause_sender() through remote control.
   /// Music Assistant does, but keeps sending audio. THREAD CONTEXT: any
