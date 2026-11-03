@@ -289,9 +289,9 @@ void AirPlayHub::log_task_cpu_() {
   const ::airplay::SocketRunner::Timing timing = this->runner_.take_timing();
   ESP_LOGD(TAG,
            "AirPlay task in the last %" PRIu32 " s: %" PRIu32 " loops, waiting %" PRIu32 " ms, UDP %" PRIu32
-           " ms (recvfrom %" PRIu32 " ms), TCP %" PRIu32 " ms, poll %" PRIu32 " ms",
+           " ms (recvfrom %" PRIu32 " ms), TCP %" PRIu32 " ms, poll %" PRIu32 " ms (%" PRIu32 " calls)",
            TASK_CPU_INTERVAL_MS / 1000, timing.loops, timing.wait_ms, timing.udp_ms, timing.recv_ms, timing.tcp_ms,
-           timing.poll_ms);
+           timing.poll_ms, timing.polls);
   if (this->receiver_ == nullptr)
     return;
   const ::airplay::Receiver::PacketTiming packets = this->receiver_->take_packet_timing();
