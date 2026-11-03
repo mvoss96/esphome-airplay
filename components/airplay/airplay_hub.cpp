@@ -262,6 +262,7 @@ void AirPlayHub::log_task_cpu_() {
     this->task_cpu_[this->task_cpu_count_++] = {this->task_status_[i].xTaskNumber,
                                                 this->task_status_[i].ulRunTimeCounter};
   if (this->get_session_state() == ::airplay::SessionState::NONE) {
+    this->runner_.take_timing();
     this->output_us_.store(0, std::memory_order_relaxed);
     this->output_calls_.store(0, std::memory_order_relaxed);
     this->output_max_us_.store(0, std::memory_order_relaxed);
@@ -278,6 +279,11 @@ void AirPlayHub::log_task_cpu_() {
     length += static_cast<size_t>(written);
   }
   ESP_LOGD(TAG, "CPU in the last %" PRIu32 " s (ms): %s", TASK_CPU_INTERVAL_MS / 1000, line);
+  const ::airplay::SocketRunner::Timing timing = this->runner_.take_timing();
+  ESP_LOGD(TAG,
+           "AirPlay task in the last %" PRIu32 " s: %" PRIu32 " loops, waiting %" PRIu32 " ms, UDP %" PRIu32
+           " ms, TCP %" PRIu32 " ms, poll %" PRIu32 " ms",
+           TASK_CPU_INTERVAL_MS / 1000, timing.loops, timing.wait_ms, timing.udp_ms, timing.tcp_ms, timing.poll_ms);
   ESP_LOGD(TAG,
            "AirPlay output in the last %" PRIu32 " s: %" PRIu32 " ms in %" PRIu32 " writes, longest %" PRIu32 " ms",
            TASK_CPU_INTERVAL_MS / 1000, this->output_us_.exchange(0, std::memory_order_relaxed) / 1000,
