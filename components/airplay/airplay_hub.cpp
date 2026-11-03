@@ -777,8 +777,10 @@ bool AirPlayHub::step_volume_(const RemoteState &remote) {
   float position = this->reported_volume_.load(std::memory_order_relaxed);
   for (int i = 0; i < MAX_VOLUME_STEPS && position >= 0.0f; i++) {
     // Read again on every step: the volume may still be changing here
-    const int steps = ::airplay::dacp_volume_steps(position, this->remote_volume_.load(std::memory_order_relaxed));
-    if (steps == 0)
+    const float target = this->remote_volume_.load(std::memory_order_relaxed);
+    const int steps = ::airplay::dacp_volume_steps(position, target);
+    // A low volume here must not mute the sender at its lowest step: it would report the mute back
+    if (steps == 0 || (steps < 0 && target > 0.0f && position < 1.5f * ::airplay::DACP_VOLUME_STEP))
       break;
     const float before = this->reported_volume_.load(std::memory_order_relaxed);
     if (this->send_command_(remote, steps > 0 ? ::airplay::DACP_VOLUME_UP : ::airplay::DACP_VOLUME_DOWN) == 0)

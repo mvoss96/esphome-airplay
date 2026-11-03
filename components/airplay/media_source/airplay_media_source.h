@@ -84,6 +84,7 @@ class AirPlayMediaSource final : public AirPlayChild, public media_source::Media
 
   audio::AudioStreamInfo stream_info_{16, ::airplay::NUM_CHANNELS, ::airplay::SAMPLE_RATE};
   bool play_requested_{false};
+  uint8_t play_requests_{0};  // Since the sender last got the speaker or the media player last took it
   SpeakerClaim claim_{SpeakerClaim::SPEAKER_CLAIM_OWNER};
   // The sender that lost the speaker; any other sender that starts playing takes it
   uint32_t declined_address_{0};

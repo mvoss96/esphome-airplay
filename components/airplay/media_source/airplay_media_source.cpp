@@ -18,6 +18,8 @@ static constexpr char PLAY_URI[] = "airplay://current";
 
 static constexpr uint32_t PLAY_RETRY_ID = 0;
 static constexpr uint32_t PLAY_RETRY_MS = 3000;
+/// Requests that are still waiting fill the orchestrator's queue, which drops what comes next
+static constexpr uint8_t MAX_PLAY_REQUESTS = 3;
 static constexpr uint32_t PAUSE_CHECK_ID = 1;
 /// A sender that has not paused this long after being asked to is disconnected instead. A realtime sender that
 /// pauses just stops sending, which the receiver notices after 3 s.
@@ -81,15 +83,18 @@ void AirPlayMediaSource::loop() {
   switch (desired) {
     case ::airplay::SessionState::NONE:
       this->play_requested_ = false;
+      this->play_requests_ = 0;
       if (state != media_source::MediaSourceState::IDLE)
         this->set_state_(media_source::MediaSourceState::IDLE);
       break;
     case ::airplay::SessionState::PLAYING:
     case ::airplay::SessionState::PAUSED:
       if (state == media_source::MediaSourceState::IDLE) {
-        if (!this->play_requested_) {
+        if (!this->play_requested_ && this->play_requests_ < MAX_PLAY_REQUESTS) {
           // Ask the orchestrator to switch to this source; it then calls play_uri()
           this->play_requested_ = true;
+          if (++this->play_requests_ == MAX_PLAY_REQUESTS)
+            ESP_LOGW(TAG, "The media player has not switched to AirPlay, asking a last time");
           this->request_play_uri_(PLAY_URI);
           // Ask again if the orchestrator dropped the request
           this->set_timeout(PLAY_RETRY_ID, PLAY_RETRY_MS, [this]() {
@@ -112,6 +117,7 @@ bool AirPlayMediaSource::can_handle(const std::string &uri) const { return uri.s
 // THREAD CONTEXT: Main loop
 bool AirPlayMediaSource::play_uri(const std::string &uri) {
   this->play_requested_ = false;
+  this->play_requests_ = 0;
   if (this->parent_->is_failed() || !this->can_handle(uri))
     return false;
 
@@ -230,6 +236,7 @@ void AirPlayMediaSource::set_claim_(SpeakerClaim claim) {
   // A sender without the speaker stays connected, but its audio is dropped as it arrives
   this->parent_->set_audio_held(!owner);
   if (owner) {
+    this->play_requests_ = 0;
     this->declined_end_ms_ = 0;
     this->cancel_timeout(PAUSE_CHECK_ID);
   }
