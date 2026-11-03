@@ -168,6 +168,18 @@ class AirPlayHub final : public Component, public ::airplay::AudioSink, public :
   static void airplay_task(void *params);
   static void remote_task(void *params);
   void register_mdns_service_();
+#if (configUSE_TRACE_FACILITY == 1) && (configGENERATE_RUN_TIME_STATS == 1)
+  /// Logs the CPU time each task used since the last call, while a sender is connected
+  void log_task_cpu_();
+  using RunTime = decltype(TaskStatus_t::ulRunTimeCounter);
+  struct TaskCpu {
+    UBaseType_t number;
+    RunTime runtime;
+  };
+  TaskStatus_t *task_status_{nullptr};
+  TaskCpu *task_cpu_{nullptr};
+  size_t task_cpu_count_{0};
+#endif
   void set_wifi_streaming_(bool streaming);
 
   // Remote control task

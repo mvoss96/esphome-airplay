@@ -55,6 +55,10 @@ static constexpr int MAX_VOLUME_STEPS = 24;
 /// Commands still reach a sender for this long after it disconnected, e.g. to resume after a pause
 static constexpr uint32_t SESSION_GRACE_MS = 15 * 60 * 1000;
 
+static constexpr uint32_t TASK_CPU_ID = 2;
+static constexpr uint32_t TASK_CPU_INTERVAL_MS = 5000;
+static constexpr size_t MAX_STATS_TASKS = 48;
+static constexpr size_t TASK_CPU_LOGGED = 8;
 static constexpr uint32_t MDNS_RETRY_ID = 0;
 static constexpr uint32_t MDNS_RETRY_INTERVAL_MS = 5000;
 
@@ -173,6 +177,16 @@ void AirPlayHub::setup() {
   }
 
   this->register_mdns_service_();
+
+#if (configUSE_TRACE_FACILITY == 1) && (configGENERATE_RUN_TIME_STATS == 1)
+  // For finding what holds up playback; only built when FreeRTOS run time statistics are enabled
+  RAMAllocator<TaskStatus_t> status_allocator;
+  RAMAllocator<TaskCpu> cpu_allocator;
+  this->task_status_ = status_allocator.allocate(MAX_STATS_TASKS);
+  this->task_cpu_ = cpu_allocator.allocate(MAX_STATS_TASKS);
+  if (this->task_status_ != nullptr && this->task_cpu_ != nullptr)
+    this->set_interval(TASK_CPU_ID, TASK_CPU_INTERVAL_MS, [this]() { this->log_task_cpu_(); });
+#endif
   this->disable_loop();
 }
 
@@ -200,6 +214,49 @@ void AirPlayHub::airplay_task(void *params) {
   while (true)
     self->runner_.run_once(RUN_INTERVAL_MS);
 }
+
+#if (configUSE_TRACE_FACILITY == 1) && (configGENERATE_RUN_TIME_STATS == 1)
+// THREAD CONTEXT: Main loop
+void AirPlayHub::log_task_cpu_() {
+  RunTime total = 0;
+  const UBaseType_t count = uxTaskGetSystemState(this->task_status_, MAX_STATS_TASKS, &total);
+  // CPU time of each task since the last call, in run time counter units (microseconds with the default
+  // esp_timer counter)
+  struct Used {
+    const char *name;
+    RunTime time;
+  } used[MAX_STATS_TASKS];
+  size_t used_count = 0;
+  for (UBaseType_t i = 0; i < count; i++) {
+    const TaskStatus_t &status = this->task_status_[i];
+    RunTime before = status.ulRunTimeCounter;
+    for (size_t j = 0; j < this->task_cpu_count_; j++) {
+      if (this->task_cpu_[j].number == status.xTaskNumber) {
+        before = this->task_cpu_[j].runtime;
+        break;
+      }
+    }
+    used[used_count++] = {status.pcTaskName, status.ulRunTimeCounter - before};
+  }
+  this->task_cpu_count_ = 0;
+  for (UBaseType_t i = 0; i < count; i++)
+    this->task_cpu_[this->task_cpu_count_++] = {this->task_status_[i].xTaskNumber,
+                                                this->task_status_[i].ulRunTimeCounter};
+  if (this->get_session_state() == ::airplay::SessionState::NONE)
+    return;
+  std::sort(used, used + used_count, [](const Used &a, const Used &b) { return a.time > b.time; });
+  char line[256];
+  size_t length = 0;
+  for (size_t i = 0; i < used_count && i < TASK_CPU_LOGGED && length < sizeof(line); i++) {
+    const int written = std::snprintf(line + length, sizeof(line) - length, "%s%s %" PRIu32, i == 0 ? "" : ", ",
+                                      used[i].name, static_cast<uint32_t>(used[i].time / 1000));
+    if (written <= 0)
+      break;
+    length += static_cast<size_t>(written);
+  }
+  ESP_LOGD(TAG, "CPU in the last %" PRIu32 " s (ms): %s", TASK_CPU_INTERVAL_MS / 1000, line);
+}
+#endif
 
 // THREAD CONTEXT: Remote control task
 void AirPlayHub::remote_task(void *params) {

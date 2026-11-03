@@ -13,6 +13,10 @@ esp32:
   flash_size: 8MB
   framework:
     type: esp-idf
+    # Builds the hub's CPU time log per task
+    sdkconfig_options:
+      CONFIG_FREERTOS_USE_TRACE_FACILITY: y
+      CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS: y
 
 packages:
   common: !include common.yaml
