@@ -32,6 +32,7 @@ airplay:
 media_source:
   - platform: airplay
     id: airplay_source
+    output_queue: 400ms
 
 spi:
   - id: spi_bus

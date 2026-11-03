@@ -138,6 +138,7 @@ void AirPlayHub::setup() {
   // Synchronized playback holds the sender's whole latency (about 2.25 s) in the buffer. Unsynchronized playback
   // fills three quarters of it, up to 500 ms, before it starts.
   config.buffer_ms = this->buffer_duration_ms_;
+  config.output_queue_ms = this->output_queue_ms_;
 #ifdef USE_AIRPLAY_METADATA
   config.metadata = true;
 #endif
@@ -204,11 +205,12 @@ void AirPlayHub::dump_config() {
                 "  Password: %s\n"
                 "  AirPlay 2: %s\n"
                 "  Buffer duration: %" PRIu32 " ms\n"
+                "  Output queue: %" PRIu32 " ms\n"
                 "  Task stack in PSRAM: %s\n"
                 "  airplay-cpp: " AIRPLAY_CPP_VERSION,
                 this->name_, this->model_, this->port_, YESNO(this->password_ != nullptr),
                 YESNO(this->receiver_ != nullptr && this->receiver_->airplay2_enabled()), this->buffer_duration_ms_,
-                YESNO(this->task_stack_in_psram_));
+                this->output_queue_ms_, YESNO(this->task_stack_in_psram_));
 }
 
 // THREAD CONTEXT: AirPlay task
@@ -305,6 +307,12 @@ void AirPlayHub::log_task_cpu_() {
            TASK_CPU_INTERVAL_MS / 1000, this->output_us_.exchange(0, std::memory_order_relaxed) / 1000,
            this->output_calls_.exchange(0, std::memory_order_relaxed),
            this->output_max_us_.exchange(0, std::memory_order_relaxed) / 1000);
+  const ::airplay::Receiver::PlaybackTiming playback = this->receiver_->take_playback_timing();
+  ESP_LOGD(TAG,
+           "AirPlay poll in the last %" PRIu32 " s: timers %" PRIu32 " ms, resend scan %" PRIu32 " ms, copying %" PRIu32
+           " ms, writing %" PRIu32 " ms",
+           TASK_CPU_INTERVAL_MS / 1000, playback.timers_us / 1000, playback.resend_us / 1000, playback.copy_us / 1000,
+           playback.write_us / 1000);
 }
 #endif
 

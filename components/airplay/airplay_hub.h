@@ -70,6 +70,7 @@ class AirPlayHub final : public Component, public ::airplay::AudioSink, public :
   void set_aac_buffer_size(uint32_t size) { this->aac_buffer_size_ = size; }
 #endif
   void set_buffer_duration(uint32_t buffer_duration_ms) { this->buffer_duration_ms_ = buffer_duration_ms; }
+  void set_output_queue(uint32_t output_queue_ms) { this->output_queue_ms_ = output_queue_ms; }
   void set_media_source(AirPlayMediaSource *media_source) { this->media_source_ = media_source; }
 #ifdef USE_AIRPLAY_ARTWORK
   void set_artwork_image(AirPlayImage *image) { this->artwork_image_ = image; }
@@ -204,6 +205,7 @@ class AirPlayHub final : public Component, public ::airplay::AudioSink, public :
   const char *model_{"ESPHome"};
   const char *password_{nullptr};
   uint32_t buffer_duration_ms_{500};
+  uint32_t output_queue_ms_{250};
   uint16_t port_;
   uint64_t airplay2_features_{0};
 #ifdef USE_AIRPLAY_AAC

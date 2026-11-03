@@ -47,7 +47,8 @@ configurations with all sensors, the cover art and the actions `airplay.play`, `
 | `password` | none | AirPlay 1 only |
 | `task_stack_in_psram` | `false` | Saves 8 KB of internal RAM |
 
-`media_source` takes `buffer_duration` (default 2.5 s with PSRAM, 500 ms without).
+`media_source` takes `buffer_duration` (default 2.5 s with PSRAM, 500 ms without) and `output_queue`: how much
+audio is written ahead to the speaker, default 250 ms. More rides out a busy CPU; the speaker's buffer must hold it.
 
 ## Hardware
 
