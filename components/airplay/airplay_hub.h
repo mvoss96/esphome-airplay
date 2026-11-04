@@ -261,7 +261,7 @@ class AirPlayHub final : public Component, public ::airplay::AudioSink, public :
   // The sender that last answered a remote control pause with success; 0 when none since pause_sender()
   std::atomic<uint32_t> remote_paused_address_{0};
   // HomeKit pairings, kept in flash; the copy to store is guarded by lock_ (allocated with AirPlay 2)
-  ESPPreference homekit_preference_;
+  ESPPreferenceObject homekit_preference_;
   std::unique_ptr<::airplay::HomeKitPairings> homekit_pairings_;
   std::atomic<bool> homekit_changed_{false};
   char status_flags_[12]{};  // Guarded by lock_
