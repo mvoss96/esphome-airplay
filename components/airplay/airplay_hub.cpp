@@ -149,6 +149,7 @@ void AirPlayHub::setup() {
   config.progress = true;
 #endif
   config.airplay2 = this->airplay2_;
+  config.homekit_identity = this->homekit_identity_;
   config.ptp = this->ptp_;
   config.airplay2_features = this->airplay2_features_;
 #if (configUSE_TRACE_FACILITY == 1) && (configGENERATE_RUN_TIME_STATS == 1)
@@ -166,8 +167,9 @@ void AirPlayHub::setup() {
   if (this->airplay2_) {
     // Pairings made through the Home app, before mDNS announces the status flags that depend on them
     this->homekit_pairings_ = std::make_unique<::airplay::HomeKitPairings>();
-    this->homekit_preference_ =
-        global_preferences->make_preference<::airplay::HomeKitPairings>(fnv1_hash("airplay_homekit"));
+    // Pairings belong to one identity: another one starts without any (and announces status flags 0x4)
+    this->homekit_preference_ = global_preferences->make_preference<::airplay::HomeKitPairings>(
+        fnv1_hash("airplay_homekit") + this->homekit_identity_);
     if (this->homekit_preference_.load(this->homekit_pairings_.get()))
       this->receiver_->set_homekit_pairings(*this->homekit_pairings_);
   }

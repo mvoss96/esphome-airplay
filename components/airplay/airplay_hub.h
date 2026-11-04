@@ -67,6 +67,7 @@ class AirPlayHub final : public Component, public ::airplay::AudioSink, public :
   void set_password(const char *password) { this->password_ = password; }
   void set_airplay2(bool airplay2) { this->airplay2_ = airplay2; }
   void set_ptp(bool ptp) { this->ptp_ = ptp; }
+  void set_homekit_identity(uint32_t identity) { this->homekit_identity_ = identity; }
   void set_airplay2_features(uint64_t features) { this->airplay2_features_ = features; }
 #ifdef USE_AIRPLAY_AAC
   void set_aac_buffer_size(uint32_t size) { this->aac_buffer_size_ = size; }
@@ -221,6 +222,7 @@ class AirPlayHub final : public Component, public ::airplay::AudioSink, public :
 #endif
   bool airplay2_{false};
   bool ptp_{false};
+  uint32_t homekit_identity_{0};
   bool task_stack_in_psram_{false};
 
   AirPlayMediaSource *media_source_{nullptr};

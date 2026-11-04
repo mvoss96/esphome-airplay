@@ -28,12 +28,13 @@ DOMAIN = "airplay"
 CONF_AIRPLAY_ID = "airplay_id"
 CONF_AIRPLAY2 = "airplay2"
 CONF_PTP = "ptp"
+CONF_HOMEKIT_IDENTITY = "homekit_identity"
 CONF_AIRPLAY2_FEATURES = "airplay2_features"
 CONF_AAC_BUFFER_SIZE = "aac_buffer_size"
 
 # The AirPlay protocol is handled by the airplay-cpp library
 AIRPLAY_CPP_REPO = "https://github.com/mvoss96/airplay-cpp.git"
-AIRPLAY_CPP_VERSION = "e462b2256d1c4fa84f376390f5c659648258e501"
+AIRPLAY_CPP_VERSION = "32c9cd503090cfbadf87a14afeb1720449b8ea99"
 
 # Room for a burst of audio packets between two reads of a UDP socket
 UDP_RECEIVE_QUEUE_SIZE = 32
@@ -98,6 +99,8 @@ CONFIG_SCHEMA = cv.All(
             # (e.g. current iOS) need it
             cv.Optional(CONF_AIRPLAY2, default=False): cv.boolean,
             cv.Optional(CONF_PTP): cv.boolean,
+            # Another number makes the speaker a new accessory for the Home app, without its pairings
+            cv.Optional(CONF_HOMEKIT_IDENTITY, default=0): cv.uint32_t,
             # For experiments: the AirPlay 2 feature bits to announce
             cv.Optional(CONF_AIRPLAY2_FEATURES): cv.hex_uint64_t,
             # Compressed audio that AirPlay 2 senders send ahead (AAC at 256 kbit/s
@@ -179,6 +182,8 @@ async def to_code(config: ConfigType) -> None:
         esp32.add_idf_component(name="espressif/esp_audio_codec", ref="2.5.0")
     if config[CONF_PTP]:
         cg.add(var.set_ptp(True))
+    if config[CONF_HOMEKIT_IDENTITY]:
+        cg.add(var.set_homekit_identity(config[CONF_HOMEKIT_IDENTITY]))
     if (features := config.get(CONF_AIRPLAY2_FEATURES)) is not None:
         cg.add(var.set_airplay2_features(features))
 
