@@ -11,7 +11,8 @@ The source that started last gets the speaker. When another source takes over, t
 not disconnected: it stays connected and gets the speaker back as soon as it plays again, so the speaker never
 has to be selected again on the phone.
 
-Playback follows the sender's clock, so sound stays in sync with video. Volume works both ways, and the media
+Playback follows the sender's clock, so sound stays in sync with video and with other AirPlay 2 speakers in a
+group (within a few ms of a HomePod). Volume works both ways, and the media
 player's play, pause, next and previous reach the sender. Track title, artist, album, position, the name of the
 sending device and the cover art are available as sensors and as an image for LVGL or any display.
 
@@ -19,7 +20,7 @@ sending device and the cover art are available as sensors and as an image for LV
 
 ```yaml
 external_components:
-  - source: github://mvoss96/esphome-airplay@v0.2.2
+  - source: github://mvoss96/esphome-airplay@v0.3.0
     components: [airplay]
 
 airplay:
@@ -61,8 +62,8 @@ and with a short buffer.
 ## Limitations
 
 - 44.1 kHz, 16-bit stereo: no lossless high resolution, no video or screen mirroring
-- AirPlay 2 groups with HomePods or other AirPlay 2 speakers are not supported, and the speaker cannot be added
-  to the Home app
+- The Home app can add the speaker (room, Siri, groups), but like shairport-sync it keeps the pairing in RAM only,
+  and the Home app shows no playback controls on its tile
 - A password works with AirPlay 1 only
 - Music Assistant ignores AirPlay 2 pause requests from speakers other than Apple's. The component also sends
   the pause through the older DACP remote control, and disconnects a sender that still keeps playing
