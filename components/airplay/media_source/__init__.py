@@ -16,6 +16,8 @@ DEPENDENCIES = ["airplay"]
 DEFAULT_BUFFER_DURATION_PSRAM_MS = 2500
 DEFAULT_BUFFER_DURATION_MS = 500
 
+CONF_OUTPUT_QUEUE = "output_queue"
+
 AirPlayMediaSource = airplay_ns.class_(
     "AirPlayMediaSource", cg.Component, media_source.MediaSource
 )
@@ -28,6 +30,12 @@ CONFIG_SCHEMA = cv.All(
                 cv.positive_time_period_milliseconds,
                 cv.Range(
                     min=TimePeriod(milliseconds=100), max=TimePeriod(milliseconds=5000)
+                ),
+            ),
+            cv.Optional(CONF_OUTPUT_QUEUE, default="250ms"): cv.All(
+                cv.positive_time_period_milliseconds,
+                cv.Range(
+                    min=TimePeriod(milliseconds=100), max=TimePeriod(milliseconds=1000)
                 ),
             ),
         }
@@ -51,3 +59,4 @@ async def to_code(config: ConfigType) -> None:
     else:
         buffer_duration_ms = DEFAULT_BUFFER_DURATION_MS
     cg.add(hub.set_buffer_duration(buffer_duration_ms))
+    cg.add(hub.set_output_queue(int(config[CONF_OUTPUT_QUEUE].total_milliseconds)))

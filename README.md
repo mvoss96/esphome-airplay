@@ -19,7 +19,7 @@ sending device and the cover art are available as sensors and as an image for LV
 
 ```yaml
 external_components:
-  - source: github://mvoss96/esphome-airplay@v0.1.0
+  - source: github://mvoss96/esphome-airplay@v0.2.2
     components: [airplay]
 
 airplay:
@@ -44,15 +44,17 @@ configurations with all sensors, the cover art and the actions `airplay.play`, `
 |---|---|---|
 | `name` | friendly name | Name in the sender's speaker list |
 | `airplay2` | `false` | Offer AirPlay 2 |
+| `ptp` | with `airplay2` | AirPlay 2 timing with PTP, which macOS needs; uses UDP ports 319 and 320 |
 | `password` | none | AirPlay 1 only |
 | `task_stack_in_psram` | `false` | Saves 8 KB of internal RAM |
 
-`media_source` takes `buffer_duration` (default 2.5 s with PSRAM, 500 ms without).
+`media_source` takes `buffer_duration` (default 2.5 s with PSRAM, 500 ms without) and `output_queue`: how much
+audio is written ahead to the speaker, default 250 ms. More rides out a busy CPU; the speaker's buffer must hold it.
 
 ## Hardware
 
-ESP32 boards with Wi-Fi and the ESP-IDF framework. Tested on the ESP32-S3 with PSRAM; the plain ESP32 is
-built in CI. PSRAM is strongly recommended: synchronized playback buffers about 2.5 s of audio (460 KB), and
+ESP32 boards with Wi-Fi and the ESP-IDF framework. Tested on the ESP32-S3 with PSRAM; the plain ESP32, the
+ESP32-C3 and the ESP32-C6 are built in CI. PSRAM is strongly recommended: synchronized playback buffers about 2.5 s of audio (460 KB), and
 AirPlay 2 adds 128 KB for the AAC stream most iOS apps send. Without PSRAM AirPlay 1 still works, unsynchronized
 and with a short buffer.
 

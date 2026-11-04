@@ -28,7 +28,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        test: [airplay1, airplay2]
+        test: [airplay1, airplay1-c3, airplay1-c6, airplay2]
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v5

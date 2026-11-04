@@ -16,6 +16,7 @@
 #endif
 
 #include <esp_heap_caps.h>
+#include <esp_timer.h>
 #include <freertos/task.h>
 #include <mdns.h>
 
@@ -55,6 +56,10 @@ static constexpr int MAX_VOLUME_STEPS = 24;
 /// Commands still reach a sender for this long after it disconnected, e.g. to resume after a pause
 static constexpr uint32_t SESSION_GRACE_MS = 15 * 60 * 1000;
 
+static constexpr uint32_t TASK_CPU_ID = 2;
+static constexpr uint32_t TASK_CPU_INTERVAL_MS = 5000;
+static constexpr size_t MAX_STATS_TASKS = 48;
+static constexpr size_t TASK_CPU_LOGGED = 8;
 static constexpr uint32_t MDNS_RETRY_ID = 0;
 static constexpr uint32_t MDNS_RETRY_INTERVAL_MS = 5000;
 
@@ -133,6 +138,7 @@ void AirPlayHub::setup() {
   // Synchronized playback holds the sender's whole latency (about 2.25 s) in the buffer. Unsynchronized playback
   // fills three quarters of it, up to 500 ms, before it starts.
   config.buffer_ms = this->buffer_duration_ms_;
+  config.output_queue_ms = this->output_queue_ms_;
 #ifdef USE_AIRPLAY_METADATA
   config.metadata = true;
 #endif
@@ -143,7 +149,12 @@ void AirPlayHub::setup() {
   config.progress = true;
 #endif
   config.airplay2 = this->airplay2_;
+  config.ptp = this->ptp_;
   config.airplay2_features = this->airplay2_features_;
+#if (configUSE_TRACE_FACILITY == 1) && (configGENERATE_RUN_TIME_STATS == 1)
+  // Measures the time spent on each audio packet, for the CPU log
+  config.clock_us = []() -> int64_t { return esp_timer_get_time(); };
+#endif
 #ifdef USE_AIRPLAY_AAC
   config.aac_decoder = &this->aac_decoder_;
   config.buffered_audio_bytes = this->aac_buffer_size_;
@@ -173,6 +184,16 @@ void AirPlayHub::setup() {
   }
 
   this->register_mdns_service_();
+
+#if (configUSE_TRACE_FACILITY == 1) && (configGENERATE_RUN_TIME_STATS == 1)
+  // For finding what holds up playback; only built when FreeRTOS run time statistics are enabled
+  RAMAllocator<TaskStatus_t> status_allocator;
+  RAMAllocator<TaskCpu> cpu_allocator;
+  this->task_status_ = status_allocator.allocate(MAX_STATS_TASKS);
+  this->task_cpu_ = cpu_allocator.allocate(MAX_STATS_TASKS);
+  if (this->task_status_ != nullptr && this->task_cpu_ != nullptr)
+    this->set_interval(TASK_CPU_ID, TASK_CPU_INTERVAL_MS, [this]() { this->log_task_cpu_(); });
+#endif
   this->disable_loop();
 }
 
@@ -185,11 +206,12 @@ void AirPlayHub::dump_config() {
                 "  Password: %s\n"
                 "  AirPlay 2: %s\n"
                 "  Buffer duration: %" PRIu32 " ms\n"
+                "  Output queue: %" PRIu32 " ms\n"
                 "  Task stack in PSRAM: %s\n"
                 "  airplay-cpp: " AIRPLAY_CPP_VERSION,
                 this->name_, this->model_, this->port_, YESNO(this->password_ != nullptr),
                 YESNO(this->receiver_ != nullptr && this->receiver_->airplay2_enabled()), this->buffer_duration_ms_,
-                YESNO(this->task_stack_in_psram_));
+                this->output_queue_ms_, YESNO(this->task_stack_in_psram_));
 }
 
 // THREAD CONTEXT: AirPlay task
@@ -200,6 +222,100 @@ void AirPlayHub::airplay_task(void *params) {
   while (true)
     self->runner_.run_once(RUN_INTERVAL_MS);
 }
+
+#if (configUSE_TRACE_FACILITY == 1) && (configGENERATE_RUN_TIME_STATS == 1)
+// THREAD CONTEXT: AirPlay task. Adds up the time of a write to the output.
+class AirPlayHub::OutputTime {
+ public:
+  explicit OutputTime(AirPlayHub *hub) : hub_(hub), start_(micros()) {}
+  ~OutputTime() {
+    const uint32_t took = micros() - this->start_;
+    this->hub_->output_us_.fetch_add(took, std::memory_order_relaxed);
+    this->hub_->output_calls_.fetch_add(1, std::memory_order_relaxed);
+    if (took > this->hub_->output_max_us_.load(std::memory_order_relaxed))
+      this->hub_->output_max_us_.store(took, std::memory_order_relaxed);
+  }
+  OutputTime(const OutputTime &) = delete;
+  OutputTime &operator=(const OutputTime &) = delete;
+
+ protected:
+  AirPlayHub *hub_;
+  uint32_t start_;
+};
+
+// THREAD CONTEXT: Main loop
+void AirPlayHub::log_task_cpu_() {
+  RunTime total = 0;
+  const UBaseType_t count = uxTaskGetSystemState(this->task_status_, MAX_STATS_TASKS, &total);
+  // CPU time of each task since the last call, in run time counter units (microseconds with the default
+  // esp_timer counter)
+  struct Used {
+    const char *name;
+    RunTime time;
+  } used[MAX_STATS_TASKS];
+  size_t used_count = 0;
+  for (UBaseType_t i = 0; i < count; i++) {
+    const TaskStatus_t &status = this->task_status_[i];
+    RunTime before = status.ulRunTimeCounter;
+    for (size_t j = 0; j < this->task_cpu_count_; j++) {
+      if (this->task_cpu_[j].number == status.xTaskNumber) {
+        before = this->task_cpu_[j].runtime;
+        break;
+      }
+    }
+    used[used_count++] = {status.pcTaskName, status.ulRunTimeCounter - before};
+  }
+  this->task_cpu_count_ = 0;
+  for (UBaseType_t i = 0; i < count; i++)
+    this->task_cpu_[this->task_cpu_count_++] = {this->task_status_[i].xTaskNumber,
+                                                this->task_status_[i].ulRunTimeCounter};
+  if (this->get_session_state() == ::airplay::SessionState::NONE) {
+    this->runner_.take_timing();
+    if (this->receiver_ != nullptr)
+      this->receiver_->take_packet_timing();
+    this->output_us_.store(0, std::memory_order_relaxed);
+    this->output_calls_.store(0, std::memory_order_relaxed);
+    this->output_max_us_.store(0, std::memory_order_relaxed);
+    return;
+  }
+  std::sort(used, used + used_count, [](const Used &a, const Used &b) { return a.time > b.time; });
+  char line[256];
+  size_t length = 0;
+  for (size_t i = 0; i < used_count && i < TASK_CPU_LOGGED && length < sizeof(line); i++) {
+    const int written = std::snprintf(line + length, sizeof(line) - length, "%s%s %" PRIu32, i == 0 ? "" : ", ",
+                                      used[i].name, static_cast<uint32_t>(used[i].time / 1000));
+    if (written <= 0)
+      break;
+    length += static_cast<size_t>(written);
+  }
+  ESP_LOGD(TAG, "CPU in the last %" PRIu32 " s (ms): %s", TASK_CPU_INTERVAL_MS / 1000, line);
+  const ::airplay::SocketRunner::Timing timing = this->runner_.take_timing();
+  ESP_LOGD(TAG,
+           "AirPlay task in the last %" PRIu32 " s: %" PRIu32 " loops, waiting %" PRIu32 " ms, UDP %" PRIu32
+           " ms (recvfrom %" PRIu32 " ms), TCP %" PRIu32 " ms, poll %" PRIu32 " ms (%" PRIu32 " calls)",
+           TASK_CPU_INTERVAL_MS / 1000, timing.loops, timing.wait_ms, timing.udp_ms, timing.recv_ms, timing.tcp_ms,
+           timing.poll_ms, timing.polls);
+  if (this->receiver_ == nullptr)
+    return;
+  const ::airplay::Receiver::PacketTiming packets = this->receiver_->take_packet_timing();
+  ESP_LOGD(TAG,
+           "AirPlay packets in the last %" PRIu32 " s: %" PRIu32 ", handling %" PRIu32
+           " ms, of that decrypting %" PRIu32 " ms, decoding %" PRIu32 " ms",
+           TASK_CPU_INTERVAL_MS / 1000, packets.packets, packets.total_us / 1000, packets.decrypt_us / 1000,
+           packets.decode_us / 1000);
+  ESP_LOGD(TAG,
+           "AirPlay output in the last %" PRIu32 " s: %" PRIu32 " ms in %" PRIu32 " writes, longest %" PRIu32 " ms",
+           TASK_CPU_INTERVAL_MS / 1000, this->output_us_.exchange(0, std::memory_order_relaxed) / 1000,
+           this->output_calls_.exchange(0, std::memory_order_relaxed),
+           this->output_max_us_.exchange(0, std::memory_order_relaxed) / 1000);
+  const ::airplay::Receiver::PlaybackTiming playback = this->receiver_->take_playback_timing();
+  ESP_LOGD(TAG,
+           "AirPlay poll in the last %" PRIu32 " s: timers %" PRIu32 " ms, resend scan %" PRIu32 " ms, copying %" PRIu32
+           " ms, writing %" PRIu32 " ms",
+           TASK_CPU_INTERVAL_MS / 1000, playback.timers_us / 1000, playback.resend_us / 1000, playback.copy_us / 1000,
+           playback.write_us / 1000);
+}
+#endif
 
 // THREAD CONTEXT: Remote control task
 void AirPlayHub::remote_task(void *params) {
@@ -381,15 +497,18 @@ void AirPlayHub::queue_remote_requests_(uint8_t requests) {
 }
 
 bool AirPlayHub::pause_sender() {
-  if (this->receiver_ == nullptr ||
-      !this->receiver_->request_sender_command(::airplay::SenderCommand::SENDER_COMMAND_PAUSE))
+  if (this->receiver_ == nullptr)
     return false;
-  this->remote_paused_address_.store(0, std::memory_order_relaxed);
-  // Also through remote control: Music Assistant reads the event connection only of Apple devices, but takes DACP
+  // AirPlay 2 senders take it on their event connection. Through remote control (DACP) as well: AirPlay 1 senders
+  // have nothing else, and Music Assistant reads the event connection only of Apple devices.
+  const bool event = this->receiver_->request_sender_command(::airplay::SenderCommand::SENDER_COMMAND_PAUSE);
   xSemaphoreTake(this->lock_, portMAX_DELAY);
   const bool has_remote = this->remote_.session_active && this->remote_.target.dacp_id[0] != '\0' &&
                           this->remote_.target.active_remote[0] != '\0';
   xSemaphoreGive(this->lock_);
+  if (!event && !has_remote)
+    return false;
+  this->remote_paused_address_.store(0, std::memory_order_relaxed);
   if (has_remote)
     this->queue_remote_requests_(REMOTE_REQUEST_PAUSE);
   return true;
@@ -409,10 +528,19 @@ void AirPlayHub::set_speaker_volume(float volume, bool to_sender) {
   if (!this->sender_volume_.compare_exchange_strong(sender_volume, volume, std::memory_order_relaxed))
     return;
   this->remote_volume_.store(volume, std::memory_order_relaxed);
-  // AirPlay 2 senders take it on their event connection; AirPlay 1 senders through remote control (DACP)
-  if (this->receiver_ != nullptr && this->receiver_->request_sender_volume(volume))
+  // AirPlay 2 senders take it on their event connection; AirPlay 1 senders, and AirPlay 2 senders that do not read
+  // it (Music Assistant), through remote control (DACP)
+  if (this->receiver_ != nullptr && this->receiver_->request_sender_volume(volume)) {
+    this->event_volume_sent_.store(true, std::memory_order_relaxed);
     return;
+  }
   this->send_remote_request(REMOTE_REQUEST_VOLUME);
+}
+
+// THREAD CONTEXT: AirPlay task. The volume sent on the event connection went nowhere: again through remote control.
+void AirPlayHub::on_event_channel_silent() {
+  if (this->event_volume_sent_.exchange(false, std::memory_order_relaxed))
+    this->send_remote_request(REMOTE_REQUEST_VOLUME);
 }
 
 // THREAD CONTEXT: Speaker playback callback
@@ -424,6 +552,9 @@ void AirPlayHub::notify_played(uint32_t frames, int64_t timestamp) {
 // ===== AirPlay task =====
 
 size_t AirPlayHub::write(const int16_t *samples, size_t frames) {
+#if (configUSE_TRACE_FACILITY == 1) && (configGENERATE_RUN_TIME_STATS == 1)
+  OutputTime output_time(this);
+#endif
   SlowCallLog slow_call(LOG_STR_LITERAL("Audio output"));
   if (this->media_source_ == nullptr)
     return frames;
@@ -452,10 +583,13 @@ size_t AirPlayHub::write(const int16_t *samples, size_t frames) {
 void AirPlayHub::on_session_state(::airplay::SessionState state) {
   SlowCallLog slow_call(LOG_STR_LITERAL("Session state change"));
   if (state == ::airplay::SessionState::NONE) {
+    if (this->media_source_ != nullptr)
+      this->media_source_->on_session_ended();
     // How close pairing and playback came to the end of the stack
     ESP_LOGD(TAG, "AirPlay task stack: %u bytes never used",
              static_cast<unsigned>(uxTaskGetStackHighWaterMark(nullptr)));
     this->sender_volume_.store(-1.0f, std::memory_order_relaxed);
+    this->event_volume_sent_.store(false, std::memory_order_relaxed);
     this->reported_volume_.store(-1.0f, std::memory_order_relaxed);
     // Keep the remote control details for a while, so that a paused sender can be resumed from here
     xSemaphoreTake(this->lock_, portMAX_DELAY);
@@ -654,8 +788,10 @@ bool AirPlayHub::step_volume_(const RemoteState &remote) {
   float position = this->reported_volume_.load(std::memory_order_relaxed);
   for (int i = 0; i < MAX_VOLUME_STEPS && position >= 0.0f; i++) {
     // Read again on every step: the volume may still be changing here
-    const int steps = ::airplay::dacp_volume_steps(position, this->remote_volume_.load(std::memory_order_relaxed));
-    if (steps == 0)
+    const float target = this->remote_volume_.load(std::memory_order_relaxed);
+    const int steps = ::airplay::dacp_volume_steps(position, target);
+    // A low volume here must not mute the sender at its lowest step: it would report the mute back
+    if (steps == 0 || (steps < 0 && target > 0.0f && position < 1.5f * ::airplay::DACP_VOLUME_STEP))
       break;
     const float before = this->reported_volume_.load(std::memory_order_relaxed);
     if (this->send_command_(remote, steps > 0 ? ::airplay::DACP_VOLUME_UP : ::airplay::DACP_VOLUME_DOWN) == 0)

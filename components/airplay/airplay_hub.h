@@ -65,11 +65,13 @@ class AirPlayHub final : public Component, public ::airplay::AudioSink, public :
   void set_model(const char *model) { this->model_ = model; }
   void set_password(const char *password) { this->password_ = password; }
   void set_airplay2(bool airplay2) { this->airplay2_ = airplay2; }
+  void set_ptp(bool ptp) { this->ptp_ = ptp; }
   void set_airplay2_features(uint64_t features) { this->airplay2_features_ = features; }
 #ifdef USE_AIRPLAY_AAC
   void set_aac_buffer_size(uint32_t size) { this->aac_buffer_size_ = size; }
 #endif
   void set_buffer_duration(uint32_t buffer_duration_ms) { this->buffer_duration_ms_ = buffer_duration_ms; }
+  void set_output_queue(uint32_t output_queue_ms) { this->output_queue_ms_ = output_queue_ms; }
   void set_media_source(AirPlayMediaSource *media_source) { this->media_source_ = media_source; }
 #ifdef USE_AIRPLAY_ARTWORK
   void set_artwork_image(AirPlayImage *image) { this->artwork_image_ = image; }
@@ -107,8 +109,9 @@ class AirPlayHub final : public Component, public ::airplay::AudioSink, public :
   void request_disconnect();
   /// IPv4 address (network byte order) of the sender that owns the session, 0 if none. THREAD CONTEXT: any
   uint32_t get_sender_address() const { return this->receiver_ != nullptr ? this->receiver_->sender_address() : 0; }
-  /// @brief Pauses an AirPlay 2 sender and keeps its session, so that it can resume here.
-  /// @return false if the sender cannot be paused this way (AirPlay 1).
+  /// @brief Pauses the sender and keeps its session, so that it can resume here: on the AirPlay 2 event connection
+  /// and through remote control (DACP).
+  /// @return false if neither reaches the sender.
   bool pause_sender();
   /// @brief Whether the sender at `address` confirmed the pause of the last pause_sender() through remote control.
   /// Music Assistant does, but keeps sending audio. THREAD CONTEXT: any
@@ -140,6 +143,7 @@ class AirPlayHub final : public Component, public ::airplay::AudioSink, public :
   void on_metadata(const ::airplay::Metadata &metadata) override;
   void on_progress(const ::airplay::Progress &progress) override;
   void on_remote_target(const ::airplay::RemoteTarget &target) override;
+  void on_event_channel_silent() override;
   void on_sender_name(const char *name) override;
 #ifdef USE_AIRPLAY_ARTWORK
   bool on_artwork_begin(::airplay::ArtworkFormat format, size_t size) override;
@@ -168,6 +172,23 @@ class AirPlayHub final : public Component, public ::airplay::AudioSink, public :
   static void airplay_task(void *params);
   static void remote_task(void *params);
   void register_mdns_service_();
+#if (configUSE_TRACE_FACILITY == 1) && (configGENERATE_RUN_TIME_STATS == 1)
+  /// Logs the CPU time each task used since the last call, while a sender is connected
+  void log_task_cpu_();
+  class OutputTime;
+  using RunTime = decltype(TaskStatus_t::ulRunTimeCounter);
+  struct TaskCpu {
+    UBaseType_t number;
+    RunTime runtime;
+  };
+  // Time the AirPlay task spent writing to the output (the speaker path, e.g. an equalizer that filters in place)
+  std::atomic<uint32_t> output_us_{0};
+  std::atomic<uint32_t> output_max_us_{0};
+  std::atomic<uint32_t> output_calls_{0};
+  TaskStatus_t *task_status_{nullptr};
+  TaskCpu *task_cpu_{nullptr};
+  size_t task_cpu_count_{0};
+#endif
   void set_wifi_streaming_(bool streaming);
 
   // Remote control task
@@ -187,6 +208,7 @@ class AirPlayHub final : public Component, public ::airplay::AudioSink, public :
   const char *model_{"ESPHome"};
   const char *password_{nullptr};
   uint32_t buffer_duration_ms_{500};
+  uint32_t output_queue_ms_{250};
   uint16_t port_;
   uint64_t airplay2_features_{0};
 #ifdef USE_AIRPLAY_AAC
@@ -194,6 +216,7 @@ class AirPlayHub final : public Component, public ::airplay::AudioSink, public :
   uint32_t aac_buffer_size_{0};
 #endif
   bool airplay2_{false};
+  bool ptp_{false};
   bool task_stack_in_psram_{false};
 
   AirPlayMediaSource *media_source_{nullptr};
@@ -222,6 +245,8 @@ class AirPlayHub final : public Component, public ::airplay::AudioSink, public :
   std::atomic<bool> session_changed_{false};
   std::atomic<uint8_t> remote_requests_{0};
   std::atomic<float> remote_volume_{0.0f};
+  // A volume went to the sender's event connection, which may turn out not to be read (Music Assistant)
+  std::atomic<bool> event_volume_sent_{false};
   // The speaker volume, 0 to 1; below 0 until the media player reports it. Main loop only.
   float device_volume_{-1.0f};
   // Volume last set by the sender, 0 to 1, to avoid sending it back; negative without a session

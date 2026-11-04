@@ -3,9 +3,11 @@
 #ifdef USE_ESP32
 
 #include "esphome/core/application.h"
+#include "esphome/core/hal.h"
 #include "esphome/core/log.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace esphome::airplay_ {
 
@@ -16,12 +18,16 @@ static constexpr char PLAY_URI[] = "airplay://current";
 
 static constexpr uint32_t PLAY_RETRY_ID = 0;
 static constexpr uint32_t PLAY_RETRY_MS = 3000;
+/// Requests that are still waiting fill the orchestrator's queue, which drops what comes next
+static constexpr uint8_t MAX_PLAY_REQUESTS = 3;
 static constexpr uint32_t PAUSE_CHECK_ID = 1;
 /// A sender that has not paused this long after being asked to is disconnected instead. A realtime sender that
 /// pauses just stops sending, which the receiver notices after 3 s.
 static constexpr uint32_t PAUSE_CHECK_MS = 6000;
 /// A sender that was disconnected and connects again within this time did so by itself (Music Assistant does)
 static constexpr uint32_t AUTO_RECONNECT_MS = 30000;
+/// A volume this close to the one taken from the sender is that one coming back through the media player
+static constexpr float VOLUME_ECHO_TOLERANCE = 0.005f;
 
 void AirPlayMediaSource::setup() { this->disable_loop(); }
 
@@ -65,18 +71,30 @@ void AirPlayMediaSource::loop() {
     }
   }
 
+  // Another sender took over while this source keeps the speaker: it gets the speaker's volume too
+  if (desired != ::airplay::SessionState::NONE && state != media_source::MediaSourceState::IDLE) {
+    const uint32_t address = this->parent_->get_sender_address();
+    if (address != this->volume_address_) {
+      this->volume_address_ = address;
+      this->parent_->send_speaker_volume();
+    }
+  }
+
   switch (desired) {
     case ::airplay::SessionState::NONE:
       this->play_requested_ = false;
+      this->play_requests_ = 0;
       if (state != media_source::MediaSourceState::IDLE)
         this->set_state_(media_source::MediaSourceState::IDLE);
       break;
     case ::airplay::SessionState::PLAYING:
     case ::airplay::SessionState::PAUSED:
       if (state == media_source::MediaSourceState::IDLE) {
-        if (!this->play_requested_) {
+        if (!this->play_requested_ && this->play_requests_ < MAX_PLAY_REQUESTS) {
           // Ask the orchestrator to switch to this source; it then calls play_uri()
           this->play_requested_ = true;
+          if (++this->play_requests_ == MAX_PLAY_REQUESTS)
+            ESP_LOGW(TAG, "The media player has not switched to AirPlay, asking a last time");
           this->request_play_uri_(PLAY_URI);
           // Ask again if the orchestrator dropped the request
           this->set_timeout(PLAY_RETRY_ID, PLAY_RETRY_MS, [this]() {
@@ -99,6 +117,7 @@ bool AirPlayMediaSource::can_handle(const std::string &uri) const { return uri.s
 // THREAD CONTEXT: Main loop
 bool AirPlayMediaSource::play_uri(const std::string &uri) {
   this->play_requested_ = false;
+  this->play_requests_ = 0;
   if (this->parent_->is_failed() || !this->can_handle(uri))
     return false;
 
@@ -110,6 +129,8 @@ bool AirPlayMediaSource::play_uri(const std::string &uri) {
   }
   // Chosen on the device: the sender gets the speaker back
   this->set_claim_(SpeakerClaim::SPEAKER_CLAIM_OWNER);
+  this->hold_sender_volume_(SENDER_VOLUME_HOLD_MS);
+  this->volume_address_ = this->parent_->get_sender_address();
   // The orchestrator restarts its count of played frames right after this call
   this->parent_->request_output_restart();
   this->parent_->send_speaker_volume();
@@ -153,15 +174,34 @@ void AirPlayMediaSource::handle_command(media_source::MediaSourceCommand command
   this->parent_->send_remote_request(request);
 }
 
+void AirPlayMediaSource::hold_sender_volume_(uint32_t duration_ms) {
+  const uint32_t now = millis();
+  const uint32_t until = now + duration_ms;
+  uint32_t current = this->follow_sender_from_ms_.load(std::memory_order_relaxed);
+  while (true) {
+    // A hold that lasts longer already stays
+    if (static_cast<int32_t>(current - now) > 0 && static_cast<int32_t>(until - current) <= 0)
+      return;
+    if (this->follow_sender_from_ms_.compare_exchange_weak(current, until, std::memory_order_relaxed))
+      return;
+  }
+}
+
+bool AirPlayMediaSource::follows_sender_() const {
+  if (this->get_state() == media_source::MediaSourceState::IDLE)
+    return false;
+  return static_cast<int32_t>(millis() - this->follow_sender_from_ms_.load(std::memory_order_relaxed)) >= 0;
+}
+
 // THREAD CONTEXT: Main loop
 void AirPlayMediaSource::decline_sender_() {
   if (!this->parent_->pause_sender()) {
-    // AirPlay 1
+    // Nothing reaches the sender (an AirPlay 1 sender without remote control)
     this->parent_->request_disconnect();
     return;
   }
-  // AirPlay 2: iOS keeps its route to a receiver that disconnects and does not connect again by itself. Paused
-  // instead, the sender stays connected and can resume here.
+  // iOS keeps its route to a receiver that disconnects and does not connect again by itself, with AirPlay 1 and 2.
+  // Paused instead, the sender stays connected and can resume here.
   ESP_LOGI(TAG, "Pausing the sender");
   this->declined_address_ = this->parent_->get_sender_address();
   this->declined_end_ms_ = 0;
@@ -196,6 +236,7 @@ void AirPlayMediaSource::set_claim_(SpeakerClaim claim) {
   // A sender without the speaker stays connected, but its audio is dropped as it arrives
   this->parent_->set_audio_held(!owner);
   if (owner) {
+    this->play_requests_ = 0;
     this->declined_end_ms_ = 0;
     this->cancel_timeout(PAUSE_CHECK_ID);
   }
@@ -203,6 +244,9 @@ void AirPlayMediaSource::set_claim_(SpeakerClaim claim) {
 
 // THREAD CONTEXT: Main loop. The player tells every source; only the sender that has the speaker follows it.
 void AirPlayMediaSource::notify_volume_changed(float volume) {
+  // Changed on the device rather than taken from the sender: the sender is not followed for a moment
+  if (std::fabs(volume - this->sender_volume_.load(std::memory_order_relaxed)) > VOLUME_ECHO_TOLERANCE)
+    this->hold_sender_volume_(LOCAL_VOLUME_HOLD_MS);
   this->parent_->set_speaker_volume(volume, this->get_state() != media_source::MediaSourceState::IDLE);
 }
 
