@@ -427,6 +427,19 @@ void AirPlayHub::loop() {
       mdns_service_txt_item_set("_raop", "_tcp", "sf", flags);
     ESP_LOGD(TAG, "Status flags %s announced", flags);
   }
+  if (this->group_changed_.exchange(false, std::memory_order_acq_rel)) {
+    char group_id[sizeof(this->group_id_)];
+    char leader[sizeof(this->group_leader_)];
+    xSemaphoreTake(this->lock_, portMAX_DELAY);
+    std::memcpy(group_id, this->group_id_, sizeof(group_id));
+    std::memcpy(leader, this->group_leader_, sizeof(leader));
+    xSemaphoreGive(this->lock_);
+    if (mdns_service_exists("_airplay", "_tcp", nullptr)) {
+      mdns_service_txt_item_set("_airplay", "_tcp", "gid", group_id);
+      mdns_service_txt_item_set("_airplay", "_tcp", "gcgl", leader);
+    }
+    ESP_LOGD(TAG, "Group %s (gcgl %s) announced", group_id, leader);
+  }
   this->disable_loop();
 }
 
@@ -679,6 +692,15 @@ void AirPlayHub::on_status_flags(const char *flags) {
   std::snprintf(this->status_flags_, sizeof(this->status_flags_), "%s", flags);
   xSemaphoreGive(this->lock_);
   this->status_flags_changed_.store(true, std::memory_order_release);
+  this->enable_loop_soon_any_context();
+}
+
+void AirPlayHub::on_group(const char *group_id, const char *contains_leader) {
+  xSemaphoreTake(this->lock_, portMAX_DELAY);
+  std::snprintf(this->group_id_, sizeof(this->group_id_), "%s", group_id);
+  std::snprintf(this->group_leader_, sizeof(this->group_leader_), "%s", contains_leader);
+  xSemaphoreGive(this->lock_);
+  this->group_changed_.store(true, std::memory_order_release);
   this->enable_loop_soon_any_context();
 }
 

@@ -148,6 +148,7 @@ class AirPlayHub final : public Component, public ::airplay::AudioSink, public :
   void on_sender_name(const char *name) override;
   void on_homekit_pairings(const ::airplay::HomeKitPairings &pairings) override;
   void on_status_flags(const char *flags) override;
+  void on_group(const char *group_id, const char *contains_leader) override;
 #ifdef USE_AIRPLAY_ARTWORK
   bool on_artwork_begin(::airplay::ArtworkFormat format, size_t size) override;
   void on_artwork_data(const uint8_t *data, size_t length) override;
@@ -266,6 +267,9 @@ class AirPlayHub final : public Component, public ::airplay::AudioSink, public :
   std::atomic<bool> homekit_changed_{false};
   char status_flags_[12]{};  // Guarded by lock_
   std::atomic<bool> status_flags_changed_{false};
+  char group_id_[40]{};       // Guarded by lock_
+  char group_leader_[2]{};    // Guarded by lock_
+  std::atomic<bool> group_changed_{false};
 
 #ifdef USE_AIRPLAY_METADATA
   ::airplay::Metadata metadata_{};  // Guarded by lock_
