@@ -267,8 +267,8 @@ class AirPlayHub final : public Component, public ::airplay::AudioSink, public :
   std::atomic<bool> homekit_changed_{false};
   char status_flags_[12]{};  // Guarded by lock_
   std::atomic<bool> status_flags_changed_{false};
-  char group_id_[40]{};       // Guarded by lock_
-  char group_leader_[2]{};    // Guarded by lock_
+  char group_id_[40]{};     // Guarded by lock_
+  char group_leader_[2]{};  // Guarded by lock_
   std::atomic<bool> group_changed_{false};
 
 #ifdef USE_AIRPLAY_METADATA
