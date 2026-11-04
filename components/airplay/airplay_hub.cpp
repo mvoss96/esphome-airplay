@@ -528,10 +528,19 @@ void AirPlayHub::set_speaker_volume(float volume, bool to_sender) {
   if (!this->sender_volume_.compare_exchange_strong(sender_volume, volume, std::memory_order_relaxed))
     return;
   this->remote_volume_.store(volume, std::memory_order_relaxed);
-  // AirPlay 2 senders take it on their event connection; AirPlay 1 senders through remote control (DACP)
-  if (this->receiver_ != nullptr && this->receiver_->request_sender_volume(volume))
+  // AirPlay 2 senders take it on their event connection; AirPlay 1 senders, and AirPlay 2 senders that do not read
+  // it (Music Assistant), through remote control (DACP)
+  if (this->receiver_ != nullptr && this->receiver_->request_sender_volume(volume)) {
+    this->event_volume_sent_.store(true, std::memory_order_relaxed);
     return;
+  }
   this->send_remote_request(REMOTE_REQUEST_VOLUME);
+}
+
+// THREAD CONTEXT: AirPlay task. The volume sent on the event connection went nowhere: again through remote control.
+void AirPlayHub::on_event_channel_silent() {
+  if (this->event_volume_sent_.exchange(false, std::memory_order_relaxed))
+    this->send_remote_request(REMOTE_REQUEST_VOLUME);
 }
 
 // THREAD CONTEXT: Speaker playback callback
@@ -580,6 +589,7 @@ void AirPlayHub::on_session_state(::airplay::SessionState state) {
     ESP_LOGD(TAG, "AirPlay task stack: %u bytes never used",
              static_cast<unsigned>(uxTaskGetStackHighWaterMark(nullptr)));
     this->sender_volume_.store(-1.0f, std::memory_order_relaxed);
+    this->event_volume_sent_.store(false, std::memory_order_relaxed);
     this->reported_volume_.store(-1.0f, std::memory_order_relaxed);
     // Keep the remote control details for a while, so that a paused sender can be resumed from here
     xSemaphoreTake(this->lock_, portMAX_DELAY);

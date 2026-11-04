@@ -143,6 +143,7 @@ class AirPlayHub final : public Component, public ::airplay::AudioSink, public :
   void on_metadata(const ::airplay::Metadata &metadata) override;
   void on_progress(const ::airplay::Progress &progress) override;
   void on_remote_target(const ::airplay::RemoteTarget &target) override;
+  void on_event_channel_silent() override;
   void on_sender_name(const char *name) override;
 #ifdef USE_AIRPLAY_ARTWORK
   bool on_artwork_begin(::airplay::ArtworkFormat format, size_t size) override;
@@ -244,6 +245,8 @@ class AirPlayHub final : public Component, public ::airplay::AudioSink, public :
   std::atomic<bool> session_changed_{false};
   std::atomic<uint8_t> remote_requests_{0};
   std::atomic<float> remote_volume_{0.0f};
+  // A volume went to the sender's event connection, which may turn out not to be read (Music Assistant)
+  std::atomic<bool> event_volume_sent_{false};
   // The speaker volume, 0 to 1; below 0 until the media player reports it. Main loop only.
   float device_volume_{-1.0f};
   // Volume last set by the sender, 0 to 1, to avoid sending it back; negative without a session
