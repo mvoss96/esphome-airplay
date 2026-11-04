@@ -163,6 +163,14 @@ void AirPlayHub::setup() {
   config.allocate = allocate_buffer;
   config.deallocate = heap_caps_free;
   this->receiver_ = std::make_unique<::airplay::Receiver>(config, this->crypto_, this->runner_, *this, this);
+  if (this->airplay2_) {
+    // Pairings made through the Home app, before mDNS announces the status flags that depend on them
+    this->homekit_pairings_ = std::make_unique<::airplay::HomeKitPairings>();
+    this->homekit_preference_ =
+        global_preferences->make_preference<::airplay::HomeKitPairings>(fnv1_hash("airplay_homekit"));
+    if (this->homekit_preference_.load(this->homekit_pairings_.get()))
+      this->receiver_->set_homekit_pairings(*this->homekit_pairings_);
+  }
   // The media player may have restored its volume before
   if (this->device_volume_ >= 0.0f)
     this->receiver_->set_device_volume(this->device_volume_);
@@ -399,6 +407,26 @@ void AirPlayHub::loop() {
     this->sender_name_callback_.call(name);
   }
 #endif
+  if (this->homekit_changed_.exchange(false, std::memory_order_acq_rel)) {
+    ::airplay::HomeKitPairings pairings;
+    xSemaphoreTake(this->lock_, portMAX_DELAY);
+    pairings = *this->homekit_pairings_;
+    xSemaphoreGive(this->lock_);
+    // Rare (the Home app adds or removes the speaker): written at once
+    if (!this->homekit_preference_.save(&pairings) || !global_preferences->sync())
+      ESP_LOGW(TAG, "Failed to store the HomeKit pairings");
+  }
+  if (this->status_flags_changed_.exchange(false, std::memory_order_acq_rel)) {
+    char flags[sizeof(this->status_flags_)];
+    xSemaphoreTake(this->lock_, portMAX_DELAY);
+    std::memcpy(flags, this->status_flags_, sizeof(flags));
+    xSemaphoreGive(this->lock_);
+    if (mdns_service_exists("_airplay", "_tcp", nullptr))
+      mdns_service_txt_item_set("_airplay", "_tcp", "flags", flags);
+    if (mdns_service_exists("_raop", "_tcp", nullptr))
+      mdns_service_txt_item_set("_raop", "_tcp", "sf", flags);
+    ESP_LOGD(TAG, "Status flags %s announced", flags);
+  }
   this->disable_loop();
 }
 
@@ -634,6 +662,24 @@ void AirPlayHub::on_metadata(const ::airplay::Metadata &metadata) {
   this->metadata_changed_.store(true, std::memory_order_release);
   this->enable_loop_soon_any_context();
 #endif
+}
+
+void AirPlayHub::on_homekit_pairings(const ::airplay::HomeKitPairings &pairings) {
+  if (this->homekit_pairings_ == nullptr)
+    return;
+  xSemaphoreTake(this->lock_, portMAX_DELAY);
+  *this->homekit_pairings_ = pairings;
+  xSemaphoreGive(this->lock_);
+  this->homekit_changed_.store(true, std::memory_order_release);
+  this->enable_loop_soon_any_context();
+}
+
+void AirPlayHub::on_status_flags(const char *flags) {
+  xSemaphoreTake(this->lock_, portMAX_DELAY);
+  std::snprintf(this->status_flags_, sizeof(this->status_flags_), "%s", flags);
+  xSemaphoreGive(this->lock_);
+  this->status_flags_changed_.store(true, std::memory_order_release);
+  this->enable_loop_soon_any_context();
 }
 
 void AirPlayHub::on_sender_name(const char *name) {

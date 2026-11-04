@@ -6,6 +6,7 @@
 
 #include "esphome/core/component.h"
 #include "esphome/core/helpers.h"
+#include "esphome/core/preferences.h"
 #include "esphome/core/static_task.h"
 
 #include <airplay.h>
@@ -145,6 +146,8 @@ class AirPlayHub final : public Component, public ::airplay::AudioSink, public :
   void on_remote_target(const ::airplay::RemoteTarget &target) override;
   void on_event_channel_silent() override;
   void on_sender_name(const char *name) override;
+  void on_homekit_pairings(const ::airplay::HomeKitPairings &pairings) override;
+  void on_status_flags(const char *flags) override;
 #ifdef USE_AIRPLAY_ARTWORK
   bool on_artwork_begin(::airplay::ArtworkFormat format, size_t size) override;
   void on_artwork_data(const uint8_t *data, size_t length) override;
@@ -257,6 +260,12 @@ class AirPlayHub final : public Component, public ::airplay::AudioSink, public :
   std::atomic<bool> volume_adjusting_{false};
   // The sender that last answered a remote control pause with success; 0 when none since pause_sender()
   std::atomic<uint32_t> remote_paused_address_{0};
+  // HomeKit pairings, kept in flash; the copy to store is guarded by lock_ (allocated with AirPlay 2)
+  ESPPreference homekit_preference_;
+  std::unique_ptr<::airplay::HomeKitPairings> homekit_pairings_;
+  std::atomic<bool> homekit_changed_{false};
+  char status_flags_[12]{};  // Guarded by lock_
+  std::atomic<bool> status_flags_changed_{false};
 
 #ifdef USE_AIRPLAY_METADATA
   ::airplay::Metadata metadata_{};  // Guarded by lock_
