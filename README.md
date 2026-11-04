@@ -53,8 +53,8 @@ audio is written ahead to the speaker, default 250 ms. More rides out a busy CPU
 
 ## Hardware
 
-ESP32 boards with Wi-Fi and the ESP-IDF framework. Tested on the ESP32-S3 with PSRAM; the plain ESP32 is
-built in CI. PSRAM is strongly recommended: synchronized playback buffers about 2.5 s of audio (460 KB), and
+ESP32 boards with Wi-Fi and the ESP-IDF framework. Tested on the ESP32-S3 with PSRAM; the plain ESP32, the
+ESP32-C3 and the ESP32-C6 are built in CI. PSRAM is strongly recommended: synchronized playback buffers about 2.5 s of audio (460 KB), and
 AirPlay 2 adds 128 KB for the AAC stream most iOS apps send. Without PSRAM AirPlay 1 still works, unsynchronized
 and with a short buffer.
 

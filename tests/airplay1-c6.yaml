@@ -1,0 +1,29 @@
+# AirPlay 1 only, with a password, on an ESP32-C6 (RISC-V, one core, no PSRAM)
+substitutions:
+  i2s_lrclk_pin: GPIO18
+  i2s_bclk_pin: GPIO19
+  i2s_dout_pin: GPIO20
+
+esphome:
+  name: airplay-test-c6
+
+esp32:
+  board: esp32-c6-devkitc-1
+  variant: esp32c6
+  framework:
+    type: esp-idf
+
+packages:
+  common: !include common.yaml
+
+airplay:
+  id: airplay_hub
+  name: ESPHome Speaker
+  model: Test Speaker
+  password: secret
+  port: 5000
+
+media_source:
+  - platform: airplay
+    id: airplay_source
+    buffer_duration: 750ms
