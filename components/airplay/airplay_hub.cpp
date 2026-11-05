@@ -435,10 +435,17 @@ void AirPlayHub::loop() {
     xSemaphoreTake(this->lock_, portMAX_DELAY);
     std::memcpy(group_id, this->group_id_, sizeof(group_id));
     std::memcpy(leader, this->group_leader_, sizeof(leader));
+    const bool in_group = this->in_group_;
     xSemaphoreGive(this->lock_);
     if (mdns_service_exists("_airplay", "_tcp", nullptr)) {
       mdns_service_txt_item_set("_airplay", "_tcp", "gid", group_id);
       mdns_service_txt_item_set("_airplay", "_tcp", "gcgl", leader);
+      // As AirPlay 2 speakers announce it while they play in a sender's group
+      if (in_group) {
+        mdns_service_txt_item_set("_airplay", "_tcp", "isGroupLeader", "0");
+      } else {
+        mdns_service_txt_item_remove("_airplay", "_tcp", "isGroupLeader");
+      }
     }
     ESP_LOGD(TAG, "Group %s (gcgl %s) announced", group_id, leader);
   }
@@ -697,8 +704,9 @@ void AirPlayHub::on_status_flags(const char *flags) {
   this->enable_loop_soon_any_context();
 }
 
-void AirPlayHub::on_group(const char *group_id, const char *contains_leader) {
+void AirPlayHub::on_group(const char *group_id, const char *contains_leader, bool in_group) {
   xSemaphoreTake(this->lock_, portMAX_DELAY);
+  this->in_group_ = in_group;
   std::snprintf(this->group_id_, sizeof(this->group_id_), "%s", group_id);
   std::snprintf(this->group_leader_, sizeof(this->group_leader_), "%s", contains_leader);
   xSemaphoreGive(this->lock_);
