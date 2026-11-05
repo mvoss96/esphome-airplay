@@ -34,7 +34,7 @@ CONF_AAC_BUFFER_SIZE = "aac_buffer_size"
 
 # The AirPlay protocol is handled by the airplay-cpp library
 AIRPLAY_CPP_REPO = "https://github.com/mvoss96/airplay-cpp.git"
-AIRPLAY_CPP_VERSION = "8213c22605d79ed55e8cbc2bdda9504559086bfe"
+AIRPLAY_CPP_VERSION = "25b6376ceb0ac8f48d06108a165f4e49eeef3d0a"
 
 # Room for a burst of audio packets between two reads of a UDP socket
 UDP_RECEIVE_QUEUE_SIZE = 32
