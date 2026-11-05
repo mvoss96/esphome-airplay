@@ -20,7 +20,7 @@ sending device and the cover art are available as sensors and as an image for LV
 
 ```yaml
 external_components:
-  - source: github://mvoss96/esphome-airplay@v0.3.0
+  - source: github://mvoss96/esphome-airplay@v0.4.0
     components: [airplay]
 
 airplay:
@@ -47,6 +47,7 @@ configurations with all sensors, the cover art and the actions `airplay.play`, `
 | `airplay2` | `false` | Offer AirPlay 2 |
 | `ptp` | with `airplay2` | AirPlay 2 timing with PTP, which macOS needs; uses UDP ports 319 and 320 |
 | `password` | none | AirPlay 1 only |
+| `homekit_identity` | `0` | Another number makes the speaker a new accessory for the Home app, e.g. when a home cannot add it again |
 | `task_stack_in_psram` | `false` | Saves 8 KB of internal RAM |
 
 `media_source` takes `buffer_duration` (default 2.5 s with PSRAM, 500 ms without) and `output_queue`: how much
@@ -62,8 +63,8 @@ and with a short buffer.
 ## Limitations
 
 - 44.1 kHz, 16-bit stereo: no lossless high resolution, no video or screen mirroring
-- The Home app can add the speaker (room, Siri, groups), but like shairport-sync it keeps the pairing in RAM only,
-  and the Home app shows no playback controls on its tile
+- The Home app can add the speaker (room, Siri, groups) and the setup survives restarts, but its tile shows
+  "control not available", as for other speakers without Apple's MFi authentication
 - A password works with AirPlay 1 only
 - Music Assistant ignores AirPlay 2 pause requests from speakers other than Apple's. The component also sends
   the pause through the older DACP remote control, and disconnects a sender that still keeps playing
