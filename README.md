@@ -16,7 +16,7 @@ group (within a few ms of a HomePod). Volume works both ways, and the media play
 previous reach the sender. Track title, artist, album, position, the name of the sending device and the cover art
 are available as sensors and as an image for LVGL or any display.
 
-The Home app can add the speaker (room, groups), and the setup survives restarts. Its tile controls playback
+The Home app can add the speaker (room, groups, Siri), and the setup survives restarts. Its tile controls playback
 without Apple's MFi authentication, also on an iPad or another device that is not the one playing.
 
 ## Usage
@@ -66,7 +66,6 @@ ESP32-C3 and the ESP32-C6 are built in CI. PSRAM is strongly recommended: synchr
 
 ## Limitations
 
-- Siri is not tested
 - A password works with AirPlay 1 only
 - Music Assistant ignores AirPlay 2 pause requests from speakers other than Apple's. The component also sends
   the pause through the older DACP remote control, and disconnects a sender that still keeps playing
