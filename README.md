@@ -12,9 +12,12 @@ not disconnected: it stays connected and gets the speaker back as soon as it pla
 has to be selected again on the phone.
 
 Playback follows the sender's clock, so sound stays in sync with video and with other AirPlay 2 speakers in a
-group (within a few ms of a HomePod). Volume works both ways, and the media
-player's play, pause, next and previous reach the sender. Track title, artist, album, position, the name of the
-sending device and the cover art are available as sensors and as an image for LVGL or any display.
+group (within a few ms of a HomePod). Volume works both ways, and the media player's play, pause, next and
+previous reach the sender. Track title, artist, album, position, the name of the sending device and the cover art
+are available as sensors and as an image for LVGL or any display.
+
+The Home app can add the speaker (room, groups), and the setup survives restarts. Its tile controls playback
+without Apple's MFi authentication, also on an iPad or another device that is not the one playing.
 
 ## Usage
 
@@ -51,21 +54,21 @@ configurations with all sensors, the cover art and the actions `airplay.play`, `
 | `task_stack_in_psram` | `false` | Saves 8 KB of internal RAM |
 
 `media_source` takes `buffer_duration` (default 2.5 s with PSRAM, 500 ms without) and `output_queue`: how much
-audio is written ahead to the speaker, default 250 ms. More rides out a busy CPU; the speaker's buffer must hold it.
+audio is written ahead to the speaker, default 250 ms. More rides out a busy CPU; the speaker's buffer must hold
+it.
 
 ## Hardware
 
 ESP32 boards with Wi-Fi and the ESP-IDF framework. Tested on the ESP32-S3 with PSRAM; the plain ESP32, the
-ESP32-C3 and the ESP32-C6 are built in CI. PSRAM is strongly recommended: synchronized playback buffers about 2.5 s of audio (460 KB), and
-AirPlay 2 adds 128 KB for the AAC stream most iOS apps send. Without PSRAM AirPlay 1 still works, unsynchronized
-and with a short buffer.
+ESP32-C3 and the ESP32-C6 are built in CI. PSRAM is strongly recommended: synchronized playback buffers about
+2.5 s of audio (460 KB), and AirPlay 2 adds 128 KB for the buffered audio that iOS apps (AAC) and Music Assistant
+(ALAC) send. Without PSRAM AirPlay 1 still works, unsynchronized and with a short buffer.
 
 ## Limitations
 
 - 44.1 kHz, 16-bit stereo: no lossless high resolution, no video or screen mirroring
-- The Home app can add the speaker (room, Siri, groups), the setup survives restarts, and its tile controls
-  playback, also from other devices than the one playing. After updating from v0.4.0 or older, remove the speaker in
-  the Home app and add it again; if that fails, change `homekit_identity`.
+- After updating from v0.4.0 or older, the Home app no longer reaches the speaker: remove it in the Home app and
+  add it again; if that fails, change `homekit_identity`. Siri is not tested.
 - A password works with AirPlay 1 only
 - Music Assistant ignores AirPlay 2 pause requests from speakers other than Apple's. The component also sends
   the pause through the older DACP remote control, and disconnects a sender that still keeps playing
