@@ -66,7 +66,6 @@ ESP32-C3 and the ESP32-C6 are built in CI. PSRAM is strongly recommended: synchr
 
 ## Limitations
 
-- 44.1 kHz, 16-bit stereo: no lossless high resolution, no video or screen mirroring
 - Siri is not tested
 - A password works with AirPlay 1 only
 - Music Assistant ignores AirPlay 2 pause requests from speakers other than Apple's. The component also sends
