@@ -17,7 +17,8 @@ previous reach the sender. Track title, artist, album, position, the name of the
 are available as sensors and as an image for LVGL or any display.
 
 The Home app can add the speaker (room, groups, Siri), and the setup survives restarts. Its tile controls playback
-without Apple's MFi authentication, also on an iPad or another device that is not the one playing.
+without Apple's MFi authentication, also on an iPad or another device that is not the one playing. With "Only
+people sharing this home", other devices and Music Assistant are refused, as by a HomePod.
 
 ## Usage
 
