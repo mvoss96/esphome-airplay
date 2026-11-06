@@ -67,8 +67,7 @@ ESP32-C3 and the ESP32-C6 are built in CI. PSRAM is strongly recommended: synchr
 ## Limitations
 
 - 44.1 kHz, 16-bit stereo: no lossless high resolution, no video or screen mirroring
-- After updating from v0.4.0 or older, the Home app no longer reaches the speaker: remove it in the Home app and
-  add it again; if that fails, change `homekit_identity`. Siri is not tested.
+- Siri is not tested
 - A password works with AirPlay 1 only
 - Music Assistant ignores AirPlay 2 pause requests from speakers other than Apple's. The component also sends
   the pause through the older DACP remote control, and disconnects a sender that still keeps playing
