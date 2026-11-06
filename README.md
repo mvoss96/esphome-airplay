@@ -20,7 +20,7 @@ sending device and the cover art are available as sensors and as an image for LV
 
 ```yaml
 external_components:
-  - source: github://mvoss96/esphome-airplay@v0.4.0
+  - source: github://mvoss96/esphome-airplay@v0.5.0
     components: [airplay]
 
 airplay:
@@ -63,8 +63,9 @@ and with a short buffer.
 ## Limitations
 
 - 44.1 kHz, 16-bit stereo: no lossless high resolution, no video or screen mirroring
-- The Home app can add the speaker (room, Siri, groups) and the setup survives restarts, but its tile shows
-  "control not available", as for other speakers without Apple's MFi authentication
+- The Home app can add the speaker (room, Siri, groups), the setup survives restarts, and its tile controls
+  playback, also from other devices than the one playing. After updating from v0.4.0 or older, remove the speaker in
+  the Home app and add it again; if that fails, change `homekit_identity`.
 - A password works with AirPlay 1 only
 - Music Assistant ignores AirPlay 2 pause requests from speakers other than Apple's. The component also sends
   the pause through the older DACP remote control, and disconnects a sender that still keeps playing
