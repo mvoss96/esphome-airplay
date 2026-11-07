@@ -24,7 +24,7 @@ people sharing this home", other devices and Music Assistant are refused, as by 
 
 ```yaml
 external_components:
-  - source: github://mvoss96/esphome-airplay@v0.5.0
+  - source: github://mvoss96/esphome-airplay@v0.6.0
     components: [airplay]
 
 airplay:
