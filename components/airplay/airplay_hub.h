@@ -67,6 +67,8 @@ class AirPlayHub final : public Component, public ::airplay::AudioSink, public :
   void set_password(const char *password) { this->password_ = password; }
   void set_airplay2(bool airplay2) { this->airplay2_ = airplay2; }
   void set_ptp(bool ptp) { this->ptp_ = ptp; }
+  void set_remote_control(bool remote_control) { this->remote_control_ = remote_control; }
+  void set_remote_cover_size(uint32_t size) { this->remote_cover_size_ = size; }
   void set_homekit_identity(uint32_t identity) { this->homekit_identity_ = identity; }
   void set_airplay2_features(uint64_t features) { this->airplay2_features_ = features; }
 #ifdef USE_AIRPLAY_AAC
@@ -146,6 +148,7 @@ class AirPlayHub final : public Component, public ::airplay::AudioSink, public :
   void on_progress(const ::airplay::Progress &progress) override;
   void on_remote_target(const ::airplay::RemoteTarget &target) override;
   void on_event_channel_silent() override;
+  bool on_sender_command(::airplay::SenderCommand command) override;
   void on_sender_name(const char *name) override;
   void on_homekit_pairings(const ::airplay::HomeKitPairings &pairings) override;
   void on_status_flags(const char *flags) override;
@@ -222,6 +225,8 @@ class AirPlayHub final : public Component, public ::airplay::AudioSink, public :
 #endif
   bool airplay2_{false};
   bool ptp_{false};
+  bool remote_control_{false};
+  uint32_t remote_cover_size_{0};
   uint32_t homekit_identity_{0};
   bool task_stack_in_psram_{false};
 

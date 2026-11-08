@@ -35,7 +35,8 @@ static constexpr uint32_t AIRPLAY_TASK_STACK_SIZE = 8192;
 // AirPlay 2 pairing (SRP and Ed25519 arithmetic) needs more
 static constexpr uint32_t AIRPLAY2_TASK_STACK_SIZE = 12288;
 static constexpr uint32_t REMOTE_TASK_STACK_SIZE = 4096;
-static constexpr UBaseType_t REMOTE_TASK_PRIORITY = 2;
+// Above the busy tasks of a device (display, audio pipelines): it mostly waits for the network
+static constexpr UBaseType_t REMOTE_TASK_PRIORITY = 4;
 static constexpr UBaseType_t AIRPLAY_TASK_PRIORITY = 5;
 static constexpr uint32_t LISTEN_RETRY_MS = 1000;
 /// Longest wait for network traffic; the receiver shortens it while a session plays
@@ -151,6 +152,8 @@ void AirPlayHub::setup() {
   config.airplay2 = this->airplay2_;
   config.homekit_identity = this->homekit_identity_;
   config.ptp = this->ptp_;
+  config.remote_control = this->remote_control_;
+  config.remote_cover_size = this->remote_cover_size_;
   config.airplay2_features = this->airplay2_features_;
 #if (configUSE_TRACE_FACILITY == 1) && (configGENERATE_RUN_TIME_STATS == 1)
   // Measures the time spent on each audio packet, for the CPU log
@@ -593,6 +596,39 @@ void AirPlayHub::on_event_channel_silent() {
     this->send_remote_request(REMOTE_REQUEST_VOLUME);
 }
 
+// THREAD CONTEXT: AirPlay task. A controller's command for a sender that does not read its event connection.
+bool AirPlayHub::on_sender_command(::airplay::SenderCommand command) {
+  uint8_t request = 0;
+  switch (command) {
+    case ::airplay::SenderCommand::SENDER_COMMAND_PLAY:
+      request = REMOTE_REQUEST_PLAY;
+      break;
+    case ::airplay::SenderCommand::SENDER_COMMAND_PAUSE:
+      request = REMOTE_REQUEST_PAUSE;
+      break;
+    case ::airplay::SenderCommand::SENDER_COMMAND_NEXT:
+      request = REMOTE_REQUEST_NEXT;
+      break;
+    case ::airplay::SenderCommand::SENDER_COMMAND_PREVIOUS:
+      request = REMOTE_REQUEST_PREVIOUS;
+      break;
+    case ::airplay::SenderCommand::SENDER_COMMAND_PLAY_PAUSE:
+      request =
+          this->get_session_state() == ::airplay::SessionState::PLAYING ? REMOTE_REQUEST_PAUSE : REMOTE_REQUEST_PLAY;
+      break;
+    default:
+      return false;
+  }
+  xSemaphoreTake(this->lock_, portMAX_DELAY);
+  const bool has_remote = this->remote_.session_active && this->remote_.target.dacp_id[0] != '\0' &&
+                          this->remote_.target.active_remote[0] != '\0';
+  xSemaphoreGive(this->lock_);
+  if (!has_remote)
+    return false;
+  this->queue_remote_requests_(request);
+  return true;
+}
+
 // THREAD CONTEXT: Speaker playback callback
 void AirPlayHub::notify_played(uint32_t frames, int64_t timestamp) {
   if (this->receiver_ != nullptr)
@@ -916,18 +952,31 @@ bool AirPlayHub::discover_remote_port_(RemoteState &remote) {
   if (mdns_query_ptr(::airplay::DACP_SERVICE_TYPE, ::airplay::DACP_SERVICE_PROTOCOL, DISCOVERY_TIMEOUT_MS,
                      DISCOVERY_MAX_RESULTS, &results) == ESP_OK) {
     for (const mdns_result_t *result = results; result != nullptr; result = result->next) {
-      if (result->instance_name != nullptr && result->port != 0 &&
-          ::airplay::dacp_instance_matches(result->instance_name, remote.target.dacp_id)) {
-        remote.port = result->port;
-        break;
+      if (result->instance_name == nullptr ||
+          !::airplay::dacp_instance_matches(result->instance_name, remote.target.dacp_id))
+        continue;
+      remote.port = result->port;
+      if (remote.port == 0) {
+        // The answer to the browse lacked the port (a lost packet): asked for once more
+        mdns_result_t *service = nullptr;
+        if (mdns_query_srv(result->instance_name, ::airplay::DACP_SERVICE_TYPE, ::airplay::DACP_SERVICE_PROTOCOL,
+                           DISCOVERY_TIMEOUT_MS, &service) == ESP_OK &&
+            service != nullptr)
+          remote.port = service->port;
+        mdns_query_results_free(service);
       }
+      break;
     }
   }
-  mdns_query_results_free(results);
   if (remote.port == 0) {
-    ESP_LOGW(TAG, "Remote control service of the sender not found");
-    return false;
+    ESP_LOGW(TAG, "Remote control service of the sender (DACP-ID %s) not found", remote.target.dacp_id);
+    for (const mdns_result_t *result = results; result != nullptr; result = result->next)
+      ESP_LOGW(TAG, "  Remote control service %s on port %u",
+               result->instance_name != nullptr ? result->instance_name : "-", result->port);
   }
+  mdns_query_results_free(results);
+  if (remote.port == 0)
+    return false;
   ESP_LOGD(TAG, "Remote control service found on port %u", remote.port);
   return true;
 }

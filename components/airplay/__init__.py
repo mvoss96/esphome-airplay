@@ -31,10 +31,12 @@ CONF_PTP = "ptp"
 CONF_HOMEKIT_IDENTITY = "homekit_identity"
 CONF_AIRPLAY2_FEATURES = "airplay2_features"
 CONF_AAC_BUFFER_SIZE = "aac_buffer_size"
+CONF_REMOTE_CONTROL = "remote_control"
+CONF_REMOTE_COVER_SIZE = "remote_cover_size"
 
 # The AirPlay protocol is handled by the airplay-cpp library
 AIRPLAY_CPP_REPO = "https://github.com/mvoss96/airplay-cpp.git"
-AIRPLAY_CPP_VERSION = "bac898df0bb3c8a67ac99a0cf36407724370636b"
+AIRPLAY_CPP_VERSION = "5f7d0f54bcd68c91afd2127f76c0831c484b10c3"
 
 # Room for a burst of audio packets between two reads of a UDP socket
 UDP_RECEIVE_QUEUE_SIZE = 32
@@ -58,6 +60,12 @@ def _validate_airplay2(config: ConfigType) -> ConfigType:
         )
     # PTP timing comes with AirPlay 2 unless turned off: macOS streams only with it
     config.setdefault(CONF_PTP, config[CONF_AIRPLAY2])
+    config.setdefault(CONF_REMOTE_CONTROL, config[CONF_AIRPLAY2])
+    if config[CONF_REMOTE_CONTROL] and not config[CONF_AIRPLAY2]:
+        raise cv.Invalid(
+            f"'{CONF_REMOTE_CONTROL}' needs '{CONF_AIRPLAY2}'",
+            path=[CONF_REMOTE_CONTROL],
+        )
     if config[CONF_PTP] and not config[CONF_AIRPLAY2]:
         raise cv.Invalid(f"'{CONF_PTP}' needs '{CONF_AIRPLAY2}'", path=[CONF_PTP])
     return config
@@ -77,6 +85,9 @@ def _consume_sockets(config: ConfigType) -> ConfigType:
     # of a playback session
     socket.consume_sockets(1, DOMAIN, socket.SocketType.TCP_LISTEN)(config)
     socket.consume_sockets(7 if config[CONF_AIRPLAY2] else 3, DOMAIN)(config)
+    # Controllers (the Home app's tile on an iPad or iPhone) take two connections each
+    if config[CONF_REMOTE_CONTROL]:
+        socket.consume_sockets(4, DOMAIN)(config)
     # PTP adds its two ports
     socket.consume_sockets(5 if config[CONF_PTP] else 3, DOMAIN, socket.SocketType.UDP)(
         config
@@ -99,6 +110,12 @@ CONFIG_SCHEMA = cv.All(
             # (e.g. current iOS) need it
             cv.Optional(CONF_AIRPLAY2, default=False): cv.boolean,
             cv.Optional(CONF_PTP): cv.boolean,
+            # The Home app's tile and Control Center on other devices control the sender through the speaker
+            cv.Optional(CONF_REMOTE_CONTROL): cv.boolean,
+            # Largest cover kept for the tile while a Mac or Music Assistant plays (in PSRAM); 0 for none
+            cv.Optional(CONF_REMOTE_COVER_SIZE, default=262144): cv.int_range(
+                min=0, max=262144
+            ),
             # Another number makes the speaker a new accessory for the Home app, without its pairings
             cv.Optional(CONF_HOMEKIT_IDENTITY, default=0): cv.uint32_t,
             # For experiments: the AirPlay 2 feature bits to announce
@@ -182,6 +199,8 @@ async def to_code(config: ConfigType) -> None:
         esp32.add_idf_component(name="espressif/esp_audio_codec", ref="2.5.0")
     if config[CONF_PTP]:
         cg.add(var.set_ptp(True))
+    cg.add(var.set_remote_control(config[CONF_REMOTE_CONTROL]))
+    cg.add(var.set_remote_cover_size(config[CONF_REMOTE_COVER_SIZE]))
     if config[CONF_HOMEKIT_IDENTITY]:
         cg.add(var.set_homekit_identity(config[CONF_HOMEKIT_IDENTITY]))
     if (features := config.get(CONF_AIRPLAY2_FEATURES)) is not None:

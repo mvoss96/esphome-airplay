@@ -17,7 +17,8 @@ previous reach the sender. Track title, artist, album, position, the name of the
 are available as sensors and as an image for LVGL or any display.
 
 The Home app can add the speaker (room, groups, Siri), and the setup survives restarts. Its tile controls playback
-without Apple's MFi authentication, also on an iPad or another device that is not the one playing. With "Only
+without Apple's MFi authentication, also on an iPad or another device that is not the one playing, and shows the
+title and cover, also while a Mac or Music Assistant plays. With "Only
 people sharing this home", other devices and Music Assistant are refused, as by a HomePod.
 
 ## Usage
@@ -51,6 +52,8 @@ configurations with all sensors, the cover art and the actions `airplay.play`, `
 | `airplay2` | `false` | Offer AirPlay 2 |
 | `ptp` | with `airplay2` | AirPlay 2 timing with PTP, which macOS needs; uses UDP ports 319 and 320 |
 | `password` | none | AirPlay 1 only |
+| `remote_control` | with `airplay2` | The Home app's tile and Control Center control the sender through the speaker; takes 4 more sockets |
+| `remote_cover_size` | `262144` | Largest cover kept in PSRAM for the tile while a Mac or Music Assistant plays; `0` for none |
 | `homekit_identity` | `0` | Another number makes the speaker a new accessory for the Home app, e.g. when a home cannot add it again |
 | `task_stack_in_psram` | `false` | Saves 8 KB of internal RAM |
 
