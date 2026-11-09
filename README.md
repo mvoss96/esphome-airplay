@@ -19,7 +19,7 @@ are available as sensors and as an image for LVGL or any display.
 The Home app can add the speaker (room, groups, Siri), and the setup survives restarts. Its tile controls playback
 without Apple's MFi authentication, also on an iPad or another device that is not the one playing, and shows the
 title and cover, also while a Mac or Music Assistant plays. With "Only people sharing this home", other devices
-and Music Assistant are refused, as by a HomePod.
+and Music Assistant are refused, as by a HomePod; with "Require password", senders ask for that password.
 
 ## Usage
 
@@ -74,7 +74,7 @@ more, and pairing or a pause can take seconds.
 
 ## Limitations
 
-- A password works with AirPlay 1 only
+- The `password` option works with AirPlay 1 only; for AirPlay 2, set "Require password" in the Home app
 - Music Assistant ignores AirPlay 2 pause requests from speakers other than Apple's. The component also sends
   the pause through the older DACP remote control, and disconnects a sender that still keeps playing
 

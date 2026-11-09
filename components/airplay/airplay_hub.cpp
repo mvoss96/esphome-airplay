@@ -24,6 +24,7 @@
 #include <cinttypes>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 namespace esphome::airplay_ {
@@ -172,9 +173,13 @@ void AirPlayHub::setup() {
     this->homekit_pairings_ = std::make_unique<::airplay::HomeKitPairings>();
     // Pairings belong to one identity: another one starts without any (and announces status flags 0x4)
     this->homekit_preference_ = global_preferences->make_preference<::airplay::HomeKitPairings>(
-        fnv1_hash("airplay_homekit") + this->homekit_identity_);
-    if (this->homekit_preference_.load(this->homekit_pairings_.get()))
+        fnv1_hash("airplay_homekit_2") + this->homekit_identity_);
+    if (this->homekit_preference_.load(this->homekit_pairings_.get())) {
       this->receiver_->set_homekit_pairings(*this->homekit_pairings_);
+    } else if (this->load_legacy_homekit_pairings_()) {
+      this->receiver_->set_homekit_pairings(*this->homekit_pairings_);
+      this->homekit_changed_.store(true, std::memory_order_release);  // Stored in the new form
+    }
   }
   // The media player may have restored its volume before
   if (this->device_volume_ >= 0.0f)
@@ -428,8 +433,12 @@ void AirPlayHub::loop() {
     xSemaphoreGive(this->lock_);
     if (mdns_service_exists("_airplay", "_tcp", nullptr))
       mdns_service_txt_item_set("_airplay", "_tcp", "flags", flags);
-    if (mdns_service_exists("_raop", "_tcp", nullptr))
+    if (mdns_service_exists("_raop", "_tcp", nullptr)) {
       mdns_service_txt_item_set("_raop", "_tcp", "sf", flags);
+      // Bit 7: the Home app requires a password
+      const bool password = this->password_ != nullptr || (std::strtoull(flags, nullptr, 16) & 0x80) != 0;
+      mdns_service_txt_item_set("_raop", "_tcp", "pw", password ? "true" : "false");
+    }
     ESP_LOGD(TAG, "Status flags %s announced", flags);
   }
   if (this->group_changed_.exchange(false, std::memory_order_acq_rel)) {
@@ -720,6 +729,25 @@ void AirPlayHub::on_metadata(const ::airplay::Metadata &metadata) {
   this->metadata_changed_.store(true, std::memory_order_release);
   this->enable_loop_soon_any_context();
 #endif
+}
+
+// Up to v0.7 the pairings were stored without the Home app's password
+bool AirPlayHub::load_legacy_homekit_pairings_() {
+  using Pairings = ::airplay::HomeKitPairings;
+  struct LegacyPairings {
+    uint8_t access_control;
+    Pairings::Controller controllers[Pairings::MAX_CONTROLLERS];
+  };
+  LegacyPairings legacy{};
+  auto preference =
+      global_preferences->make_preference<LegacyPairings>(fnv1_hash("airplay_homekit") + this->homekit_identity_);
+  if (!preference.load(&legacy))
+    return false;
+  *this->homekit_pairings_ = Pairings{};
+  this->homekit_pairings_->access_control = legacy.access_control;
+  std::memcpy(this->homekit_pairings_->controllers, legacy.controllers, sizeof(legacy.controllers));
+  ESP_LOGI(TAG, "HomeKit pairings taken over from v0.7");
+  return true;
 }
 
 void AirPlayHub::on_homekit_pairings(const ::airplay::HomeKitPairings &pairings) {
