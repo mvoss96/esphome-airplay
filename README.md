@@ -25,7 +25,7 @@ and Music Assistant are refused, as by a HomePod; with "Require password", sende
 
 ```yaml
 external_components:
-  - source: github://mvoss96/esphome-airplay@v0.7.0
+  - source: github://mvoss96/esphome-airplay@v0.8.0
     components: [airplay]
 
 airplay:
