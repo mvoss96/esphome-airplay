@@ -106,8 +106,7 @@ CONFIG_SCHEMA = cv.All(
                 cv.string_strict, cv.Length(min=1, max=64)
             ),
             cv.Optional(CONF_PORT, default=5000): cv.port,
-            # Experimental: AirPlay 2 with realtime audio; senders without AirPlay 1
-            # (e.g. current iOS) need it
+            # AirPlay 2; senders without AirPlay 1 (e.g. current iOS) need it
             cv.Optional(CONF_AIRPLAY2, default=False): cv.boolean,
             cv.Optional(CONF_PTP): cv.boolean,
             # The Home app's tile and Control Center on other devices control the sender through the speaker

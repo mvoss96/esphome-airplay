@@ -18,8 +18,8 @@ are available as sensors and as an image for LVGL or any display.
 
 The Home app can add the speaker (room, groups, Siri), and the setup survives restarts. Its tile controls playback
 without Apple's MFi authentication, also on an iPad or another device that is not the one playing, and shows the
-title and cover, also while a Mac or Music Assistant plays. With "Only
-people sharing this home", other devices and Music Assistant are refused, as by a HomePod.
+title and cover, also while a Mac or Music Assistant plays. With "Only people sharing this home", other devices
+and Music Assistant are refused, as by a HomePod.
 
 ## Usage
 
@@ -67,6 +67,10 @@ ESP32 boards with Wi-Fi and the ESP-IDF framework. Tested on the ESP32-S3 with P
 ESP32-C3 and the ESP32-C6 are built in CI. PSRAM is strongly recommended: synchronized playback buffers about
 2.5 s of audio (460 KB), and AirPlay 2 adds 128 KB for the buffered audio that iOS apps (AAC) and Music Assistant
 (ALAC) send. Without PSRAM AirPlay 1 still works, unsynchronized and with a short buffer.
+
+Set `wifi: power_save_mode: none`. The component turns power saving off while it plays, but pairing, the Home
+app's tile and Music Assistant's remote control also need a fast network: with power saving, pings take 300 ms or
+more, and pairing or a pause can take seconds.
 
 ## Limitations
 
