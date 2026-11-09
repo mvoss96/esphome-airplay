@@ -36,7 +36,7 @@ CONF_REMOTE_COVER_SIZE = "remote_cover_size"
 
 # The AirPlay protocol is handled by the airplay-cpp library
 AIRPLAY_CPP_REPO = "https://github.com/mvoss96/airplay-cpp.git"
-AIRPLAY_CPP_VERSION = "0b8bac4ba8eca717a22d09412514a33f975acbe6"
+AIRPLAY_CPP_VERSION = "50315d0b59511c1330cc071d9e86f9c2f0945bc1"
 
 # Room for a burst of audio packets between two reads of a UDP socket
 UDP_RECEIVE_QUEUE_SIZE = 32
