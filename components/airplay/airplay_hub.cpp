@@ -63,6 +63,10 @@ static constexpr uint32_t TASK_CPU_INTERVAL_MS = 5000;
 static constexpr size_t MAX_STATS_TASKS = 48;
 static constexpr size_t TASK_CPU_LOGGED = 8;
 static constexpr uint32_t MDNS_RETRY_ID = 0;
+static constexpr uint32_t PROGRESS_END_ID = 1;
+/// Playing on this long past the track's end, with no new track, makes its length unknown (Music Assistant
+/// sends the position once and plays on into the next chapter)
+static constexpr uint32_t PROGRESS_OVERRUN_MS = 5000;
 static constexpr uint32_t MDNS_RETRY_INTERVAL_MS = 5000;
 
 static constexpr size_t MAX_TXT_RECORDS = 20;
@@ -474,6 +478,19 @@ void AirPlayHub::update_progress_clock_() {
       this->progress_base_ms_ += now - this->progress_since_ms_;
     this->progress_since_ms_ = now;
     this->progress_running_ = running;
+  }
+  if (running) {
+    const uint32_t remaining = this->progress_duration_ms_ - this->get_track_progress_ms();
+    this->set_timeout(PROGRESS_END_ID, remaining + PROGRESS_OVERRUN_MS, [this]() {
+      if (!this->progress_running_)
+        return;
+      ESP_LOGD(TAG, "Playing on past the end of the track: its length is unknown");
+      this->progress_duration_ms_ = 0;
+      this->progress_running_ = false;
+      this->progress_callback_.call();
+    });
+  } else {
+    this->cancel_timeout(PROGRESS_END_ID);
   }
   this->progress_callback_.call();
 }
