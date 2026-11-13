@@ -68,6 +68,7 @@ class AirPlayHub final : public Component, public ::airplay::AudioSink, public :
   void set_airplay2(bool airplay2) { this->airplay2_ = airplay2; }
   void set_ptp(bool ptp) { this->ptp_ = ptp; }
   void set_remote_control(bool remote_control) { this->remote_control_ = remote_control; }
+  void set_itunes(bool itunes) { this->itunes_ = itunes; }
   void set_remote_cover_size(uint32_t size) { this->remote_cover_size_ = size; }
   void set_homekit_identity(uint32_t identity) { this->homekit_identity_ = identity; }
   void set_airplay2_features(uint64_t features) { this->airplay2_features_ = features; }
@@ -226,6 +227,7 @@ class AirPlayHub final : public Component, public ::airplay::AudioSink, public :
   bool airplay2_{false};
   bool ptp_{false};
   bool remote_control_{false};
+  bool itunes_{false};
   uint32_t remote_cover_size_{0};
   uint32_t homekit_identity_{0};
   bool task_stack_in_psram_{false};

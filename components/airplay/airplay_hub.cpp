@@ -356,7 +356,7 @@ void AirPlayHub::remote_task(void *params) {
 /// Adds an mDNS service unless it is already registered or has no TXT records
 static bool add_mdns_service(const char *instance, const char *type, uint16_t port, const ::airplay::TxtRecord *records,
                              size_t count) {
-  if (count == 0 || mdns_service_exists(type, "_tcp", nullptr))
+  if (count == 0 || mdns_service_exists_with_instance(instance, type, "_tcp", nullptr))
     return true;
   mdns_txt_item_t txt[MAX_TXT_RECORDS];
   count = std::min(count, MAX_TXT_RECORDS);
@@ -379,10 +379,29 @@ void AirPlayHub::register_mdns_service_() {
   // AirPlay 2 senders look for _airplay._tcp, whose instance name is the plain name; none without AirPlay 2
   size_t airplay_count = 0;
   const ::airplay::TxtRecord *airplay = this->receiver_->airplay_txt_records(&airplay_count);
-  if (!add_mdns_service(instance, "_raop", this->port_, raop, raop_count) ||
-      !add_mdns_service(this->name_, "_airplay", this->port_, airplay, airplay_count)) {
-    this->set_timeout(MDNS_RETRY_ID, MDNS_RETRY_INTERVAL_MS, [this]() { this->register_mdns_service_(); });
+  bool ok = add_mdns_service(instance, "_raop", this->port_, raop, raop_count) &&
+            add_mdns_service(this->name_, "_airplay", this->port_, airplay, airplay_count);
+
+  // A second, pure AirPlay 1 _raop service for senders that reject any AirPlay 2 hint, such as iTunes for
+  // Windows. It shares the port and the MAC (so the same RTSP server and Apple-Challenge answer serve it); the
+  // TXT set is the RAOP set without the AirPlay 2 keys ft, pk and vv. AirPlay 2 senders keep using the first
+  // _raop and _airplay services unchanged.
+  if (this->itunes_) {
+    ::airplay::TxtRecord ap1[MAX_TXT_RECORDS];
+    size_t ap1_count = 0;
+    for (size_t i = 0; i < raop_count && ap1_count < MAX_TXT_RECORDS; i++) {
+      const char *key = raop[i].key;
+      if (std::strcmp(key, "ft") == 0 || std::strcmp(key, "pk") == 0 || std::strcmp(key, "vv") == 0)
+        continue;
+      ap1[ap1_count++] = raop[i];
+    }
+    char itunes_instance[96];
+    std::snprintf(itunes_instance, sizeof(itunes_instance), "%s (iTunes)", instance);
+    ok = add_mdns_service(itunes_instance, "_raop", this->port_, ap1, ap1_count) && ok;
   }
+
+  if (!ok)
+    this->set_timeout(MDNS_RETRY_ID, MDNS_RETRY_INTERVAL_MS, [this]() { this->register_mdns_service_(); });
 }
 
 // THREAD CONTEXT: Main loop. Woken by the AirPlay task.

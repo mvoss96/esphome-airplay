@@ -33,6 +33,7 @@ CONF_AIRPLAY2_FEATURES = "airplay2_features"
 CONF_AAC_BUFFER_SIZE = "aac_buffer_size"
 CONF_REMOTE_CONTROL = "remote_control"
 CONF_REMOTE_COVER_SIZE = "remote_cover_size"
+CONF_ITUNES = "itunes"
 
 # The AirPlay protocol is handled by the airplay-cpp library
 AIRPLAY_CPP_REPO = "https://github.com/mvoss96/airplay-cpp.git"
@@ -68,6 +69,10 @@ def _validate_airplay2(config: ConfigType) -> ConfigType:
         )
     if config[CONF_PTP] and not config[CONF_AIRPLAY2]:
         raise cv.Invalid(f"'{CONF_PTP}' needs '{CONF_AIRPLAY2}'", path=[CONF_PTP])
+    # Without AirPlay 2 the only _raop service is already a plain AirPlay 1 one that iTunes accepts, so the
+    # extra announcement would just duplicate it
+    if config[CONF_ITUNES] and not config[CONF_AIRPLAY2]:
+        raise cv.Invalid(f"'{CONF_ITUNES}' needs '{CONF_AIRPLAY2}'", path=[CONF_ITUNES])
     return config
 
 
@@ -111,6 +116,9 @@ CONFIG_SCHEMA = cv.All(
             cv.Optional(CONF_PTP): cv.boolean,
             # The Home app's tile and Control Center on other devices control the sender through the speaker
             cv.Optional(CONF_REMOTE_CONTROL): cv.boolean,
+            # Announce a second, pure AirPlay 1 _raop service so senders that reject any AirPlay 2 hint, such
+            # as iTunes for Windows, can play. Needs 'airplay2'; adds an extra speaker named "<name> (iTunes)"
+            cv.Optional(CONF_ITUNES, default=False): cv.boolean,
             # Largest cover kept for the tile while a Mac or Music Assistant plays (in PSRAM); 0 for none
             cv.Optional(CONF_REMOTE_COVER_SIZE, default=262144): cv.int_range(
                 min=0, max=262144
@@ -200,6 +208,7 @@ async def to_code(config: ConfigType) -> None:
         cg.add(var.set_ptp(True))
     cg.add(var.set_remote_control(config[CONF_REMOTE_CONTROL]))
     cg.add(var.set_remote_cover_size(config[CONF_REMOTE_COVER_SIZE]))
+    cg.add(var.set_itunes(config[CONF_ITUNES]))
     if config[CONF_HOMEKIT_IDENTITY]:
         cg.add(var.set_homekit_identity(config[CONF_HOMEKIT_IDENTITY]))
     if (features := config.get(CONF_AIRPLAY2_FEATURES)) is not None:
