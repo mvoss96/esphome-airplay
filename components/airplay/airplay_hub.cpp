@@ -155,6 +155,7 @@ void AirPlayHub::setup() {
   config.progress = true;
 #endif
   config.airplay2 = this->airplay2_;
+  config.itunes = this->itunes_;
   config.homekit_identity = this->homekit_identity_;
   config.ptp = this->ptp_;
   config.remote_control = this->remote_control_;
