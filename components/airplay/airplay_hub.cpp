@@ -397,6 +397,16 @@ void AirPlayHub::register_mdns_service_() {
     }
     char itunes_instance[96];
     std::snprintf(itunes_instance, sizeof(itunes_instance), "%s (iTunes)", instance);
+    // iTunes merges _raop services that share a MAC into one entry, so give this one its own device id by
+    // flipping the locally administered bit of the first MAC octet. The first twelve characters of the
+    // instance name are the MAC in hex.
+    unsigned first_octet = 0;
+    if (std::sscanf(itunes_instance, "%2x", &first_octet) == 1) {
+      char hex[3];
+      std::snprintf(hex, sizeof(hex), "%02X", first_octet ^ 0x02u);
+      itunes_instance[0] = hex[0];
+      itunes_instance[1] = hex[1];
+    }
     ok = add_mdns_service(itunes_instance, "_raop", this->port_, ap1, ap1_count) && ok;
   }
 
