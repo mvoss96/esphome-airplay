@@ -1,8 +1,8 @@
 # ESPHome AirPlay
 
-Turns an ESPHome device into an AirPlay speaker. iPhone, iPad, Mac, Music Assistant and other AirPlay senders
-find it in their speaker list and stream to it, AirPlay 1 or AirPlay 2. It is an external component for the
-stable ESPHome release, built on [airplay-cpp](https://github.com/mvoss96/airplay-cpp).
+Turns an ESPHome device into an AirPlay speaker. iPhone, iPad, Mac, iTunes for Windows, Music Assistant and other
+AirPlay senders find it in their speaker list and stream to it, AirPlay 1 or AirPlay 2. It is an external component
+for the stable ESPHome release, built on [airplay-cpp](https://github.com/mvoss96/airplay-cpp).
 
 ## What it does
 

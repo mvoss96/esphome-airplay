@@ -155,7 +155,6 @@ void AirPlayHub::setup() {
   config.progress = true;
 #endif
   config.airplay2 = this->airplay2_;
-  config.itunes = this->itunes_;
   config.homekit_identity = this->homekit_identity_;
   config.ptp = this->ptp_;
   config.remote_control = this->remote_control_;
@@ -382,34 +381,6 @@ void AirPlayHub::register_mdns_service_() {
   const ::airplay::TxtRecord *airplay = this->receiver_->airplay_txt_records(&airplay_count);
   bool ok = add_mdns_service(instance, "_raop", this->port_, raop, raop_count) &&
             add_mdns_service(this->name_, "_airplay", this->port_, airplay, airplay_count);
-
-  // A second, pure AirPlay 1 _raop service for senders that reject any AirPlay 2 hint, such as iTunes for
-  // Windows. It shares the port and the MAC (so the same RTSP server and Apple-Challenge answer serve it); the
-  // TXT set is the RAOP set without the AirPlay 2 keys ft, pk and vv. AirPlay 2 senders keep using the first
-  // _raop and _airplay services unchanged.
-  if (this->itunes_) {
-    ::airplay::TxtRecord ap1[MAX_TXT_RECORDS];
-    size_t ap1_count = 0;
-    for (size_t i = 0; i < raop_count && ap1_count < MAX_TXT_RECORDS; i++) {
-      const char *key = raop[i].key;
-      if (std::strcmp(key, "ft") == 0 || std::strcmp(key, "pk") == 0 || std::strcmp(key, "vv") == 0)
-        continue;
-      ap1[ap1_count++] = raop[i];
-    }
-    char itunes_instance[96];
-    std::snprintf(itunes_instance, sizeof(itunes_instance), "%s (iTunes)", instance);
-    // iTunes merges _raop services that share a MAC into one entry, so give this one its own device id by
-    // flipping the locally administered bit of the first MAC octet. The first twelve characters of the
-    // instance name are the MAC in hex.
-    unsigned first_octet = 0;
-    if (std::sscanf(itunes_instance, "%2x", &first_octet) == 1) {
-      char hex[3];
-      std::snprintf(hex, sizeof(hex), "%02X", first_octet ^ 0x02u);
-      itunes_instance[0] = hex[0];
-      itunes_instance[1] = hex[1];
-    }
-    ok = add_mdns_service(itunes_instance, "_raop", this->port_, ap1, ap1_count) && ok;
-  }
 
   if (!ok)
     this->set_timeout(MDNS_RETRY_ID, MDNS_RETRY_INTERVAL_MS, [this]() { this->register_mdns_service_(); });
