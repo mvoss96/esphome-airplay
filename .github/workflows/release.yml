@@ -24,4 +24,4 @@ jobs:
           [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::Not a version: $VERSION"; exit 1; }
           LIBRARY=$(grep '^AIRPLAY_CPP_VERSION' components/airplay/__init__.py | cut -d'"' -f2)
           gh release create "$VERSION" --target "$GITHUB_SHA" --title "$VERSION" \
-            --notes "For ESPHome 2026.10.1 or newer, with airplay-cpp ${LIBRARY:0:7}."
+            --notes "For ESPHome 2026.11.0 or newer, with airplay-cpp ${LIBRARY:0:7}."

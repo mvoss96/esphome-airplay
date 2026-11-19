@@ -6,7 +6,7 @@ on:
 
 env:
   # The stable ESPHome release the component is built against
-  ESPHOME_VERSION: "2026.10.1"
+  ESPHOME_VERSION: "2026.11.0"
 
 jobs:
   format:
