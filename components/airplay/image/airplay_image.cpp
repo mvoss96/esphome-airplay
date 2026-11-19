@@ -72,7 +72,7 @@ bool AirPlayJpegDecoder::decode_opened() {
   this->jpeg_.setPixelType(RGB8888);
   const int width = this->jpeg_.getWidth();
   const int height = this->jpeg_.getHeight();
-  if (!this->set_size(width, height)) {
+  if (!this->resize_image_(width, height)) {
     this->jpeg_.close();
     return false;
   }
@@ -86,9 +86,9 @@ bool AirPlayJpegDecoder::decode_opened() {
   int options = 0;
   if (scale > 1) {
     options = scale == 2 ? JPEG_SCALE_HALF : (scale == 4 ? JPEG_SCALE_QUARTER : JPEG_SCALE_EIGHTH);
-    this->x_scale_ = static_cast<double>(this->image_->get_buffer_width()) * scale / width;
-    this->y_scale_ = static_cast<double>(this->image_->get_buffer_height()) * scale / height;
   }
+  // JPEGDEC rounds the reduced size up
+  this->prepare_draw_((width + scale - 1) / scale, (height + scale - 1) / scale);
   const bool ok = this->jpeg_.decode(0, 0, options) != 0;
   if (!ok) {
     ESP_LOGE(TAG, "Cover art could not be decoded: %d", this->jpeg_.getLastError());
