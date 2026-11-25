@@ -72,11 +72,6 @@ Set `wifi: power_save_mode: none`. The component turns power saving off while it
 app's tile and Music Assistant's remote control also need a fast network: with power saving, pings take 300 ms or
 more, and pairing or a pause can take seconds.
 
-## Limitations
-
-- The `password` option works with AirPlay 1 only; for AirPlay 2, set "Require password" in the Home app
-- Music Assistant ignores AirPlay 2 pause requests from speakers other than Apple's. The component also sends
-  the pause through the older DACP remote control, and disconnects a sender that still keeps playing
 
 ## License
 
